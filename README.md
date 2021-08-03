@@ -72,6 +72,7 @@ _______________
     - Turn on Num Lock at startup
 
 > Additional features courtesy of Sophia script - https://github.com/farag2/Windows-10-Sophia-Script 
+
     - Create a cleanup task for the software distribution folder
     - Create a cleanup task for temporary files
     - Disable app smart screen
