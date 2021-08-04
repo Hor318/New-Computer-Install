@@ -63,9 +63,7 @@ _______________
     - Hide People Taskbar icon [User]
     - Hide Task View on the taskbar [User]
     - Hide Windows Ink Workspace [User]
-    - Install a basic set of software via chocolatey
-   > 7zip / Adobe Reader / Google Chrome / Java
-
+    - Install a basic set of software via chocolatey (7zip / Adobe Reader / Google Chrome / Java)
     - Install missing drivers for hardware
     - Install available detected windows updates
     - Launch explorer processes in a separate process [User]
