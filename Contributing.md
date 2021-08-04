@@ -21,7 +21,8 @@ If you would like to contribute *please keep these guidelines in mind*
     HelloWorld
   ```
 
-4. **Test your changes** - make sure that everything works and has been tested. 
+4. **Test your changes** - make sure that everything works and has been tested. If you add new changes please update Readme.md to reflect the changes!
+> [Readme.md](https://github.com/aar318/New-Computer-Install/blob/main/README.md) 
 
 5. Modify documentation or add new documentation where needed
 

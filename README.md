@@ -1,7 +1,17 @@
+_______________
 # New-Computer-Install
+_______________
 
 >! Use at your own risk. I am not responsible for any damage that may be caused by running this script. It is expected that you will fully read the script prior to running on any production systems!
 
+_______________
+## How do I run this?
+_______________
+
+Easy! Either download the .ps1 file, right click, and run with powershell... Or download the latest release from the release page
+> [Releases](https://github.com/aar318/New-Computer-Install/releases)
+
+After you run it the program will prompt for admin credentials and then just follow the on screen prompts (95% automated currently with a couple of confirmation prompts and a computer name change)
 
 _______________
 ## What does it do?
@@ -85,5 +95,7 @@ _______________
     - Set Windows Explorer to launch in separate processes [User]
     - Set Windows Explorer to launch to This PC
 
+_______________
 ### A detailed log of the installation process can be found here
+_______________
 > "C:\Windows\Temp\New Computer Install" + "-" + $Date + ".log"
