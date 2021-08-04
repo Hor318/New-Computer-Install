@@ -1,21 +1,17 @@
 _______________
 # New-Computer-Install
-_______________
 
 >! Use at your own risk. I am not responsible for any damage that may be caused by running this script. It is expected that you will fully read the script prior to running on any production systems!
-
 _______________
 ## How do I run this?
-_______________
 
 Easy! Either download the .ps1 file, right click, and run with powershell... Or download the latest release from the release page
 > [Releases](https://github.com/aar318/New-Computer-Install/releases)
 
 After you run it the program will prompt for admin credentials and then just follow the on screen prompts (95% automated currently with a couple of confirmation prompts and a computer name change)
-
 _______________
 ## What does it do?
-_______________
+
 This is a summary of the script's functions
 
 1. Prerequisites for the script to run
@@ -37,7 +33,7 @@ This is a summary of the script's functions
 
 _______________
 ## Features
-_______________
+
 > The features listed apply to the system unless [User] is specified
 > This is a list of features, but not necessarily in the order they are executed
 
@@ -80,6 +76,7 @@ _______________
     - Turn off silent installation of Suggested Apps [User]
     - Turn on Num Lock at startup
 
+_______________
 > Additional features courtesy of Sophia script - https://github.com/farag2/Windows-10-Sophia-Script 
 
     - Create a cleanup task for the software distribution folder
@@ -96,5 +93,5 @@ _______________
 
 _______________
 ### A detailed log of the installation process can be found here
-_______________
 > "C:\Windows\Temp\New Computer Install" + "-" + $Date + ".log"
+_______________
