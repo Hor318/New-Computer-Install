@@ -1,10 +1,10 @@
 
 # CONTRIBUTING
-
+________________
 Contributions help to improve this project and many other projects on Github. If you would like to contribute it is greatly appreciated and more than welcome.
 
 If you would like to contribute *please keep these guidelines in mind*
-
+________________
 1. **Create a new branch for each issue** being worked on and be sure to *label it* appropriately
     - e.g. If Issue #10 is Missing option to filter data please use a name in the format IssueNumber-Description-MoreOfTheDescription
     > 10-Missing-option-Add-Filter
