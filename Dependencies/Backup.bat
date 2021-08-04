@@ -1,58 +1,51 @@
-@echo off
+@Echo off
 
-echo StartTileBackup
-echo ----------------
-echo A simple batch script to backup and restore the Start menu tiles and pinned apps.
-echo.
-echo Official project page: https://github.com/TurboLabIt/StartTileBackup
-echo.
-echo PRESS A KEY TO **BACKUP**!
-pause
+Echo StartTileBackup
+Echo ----------------
+Echo A simple batch script to backup and restore the Start menu tiles and pinned apps.
+Echo.
+Echo Official project page: https://github.com/TurboLabIt/StartTileBackup
+Echo.
+Echo PRESS A KEY TO **BACKUP**!
 
-
-net session >nul 2>&1
-if %errorLevel% == 0 (
-        echo ### Running as administrator
-    ) else (
-		echo ### Permission denied! Please run this script as administrator
-        GOTO END
-    )
-
+Net Session >nul 2>&1
+  If %ErrorLevel% == 0 (
+    Echo ### Running as administrator
+  ) Else (
+	Echo ### Permission denied! Please run this script as administrator
+      GOTO END
+  )
 	
 SET APPDIR=%~dp0
 SET BACKUPDIR=%APPDIR%backup\
-cd %APPDIR%
-%~d0
+  Cd %APPDIR%
+  %~d0
 
-IF NOT EXIST "%BACKUPDIR%" GOTO CREATE_BACKUP_DIR
-echo ### Removing previous backup...
-rmdir /s/q "%BACKUPDIR%"
+  IF NOT EXIST "%BACKUPDIR%" GOTO CREATE_BACKUP_DIR
 
+Echo ### Removing previous backup...
+  Rmdir /s/q "%BACKUPDIR%"
 
 :CREATE_BACKUP_DIR
-echo ### Creating new backup dir in %BACKUPDIR%
-mkdir "%BACKUPDIR%"
+Echo ### Creating new backup dir in %BACKUPDIR%
+  Mkdir "%BACKUPDIR%"
 
+Echo ### Killing File Explorer...
+  Taskkill /im explorer.exe /f
 
-echo ### Killing File Explorer...
-taskkill /im explorer.exe /f
+Echo ### File backup in progress!
+  Robocopy "%LocalAppData%\Microsoft\Windows\CloudStore" "%BACKUPDIR%CloudStore" /E
+  Robocopy "%LocalAppData%\Microsoft\Windows\Caches" "%BACKUPDIR%Caches" /E
+  Robocopy "%LocalAppData%\Microsoft\Windows\Explorer" "%BACKUPDIR%Explorer" /E
 
+Echo ### Registry key backup in progress!
+  Reg export HKCU\Software\Microsoft\Windows\CurrentVersion\CloudStore "%BACKUPDIR%CloudStore.reg"
 
-echo ### File backup in progress!
-robocopy "%LocalAppData%\Microsoft\Windows\CloudStore" "%BACKUPDIR%CloudStore" /E
-robocopy "%LocalAppData%\Microsoft\Windows\Caches" "%BACKUPDIR%Caches" /E
-robocopy "%LocalAppData%\Microsoft\Windows\Explorer" "%BACKUPDIR%Explorer" /E
-
-
-echo ### Registry key backup in progress!
-reg export HKCU\Software\Microsoft\Windows\CurrentVersion\CloudStore "%BACKUPDIR%CloudStore.reg"
-
-
-echo ### Restarting File Explorer...
-explorer.exe
-
+Echo ### Restarting File Explorer...
+  Explorer.exe
 
 :END
-echo ### Procedure completed. Bye bye.
-echo.
-ping 127.0.0.1 -n 10 >NUL
+Echo ### Procedure completed. Bye bye.
+Echo.
+  Ping 127.0.0.1 -n 10 >NUL
+  
