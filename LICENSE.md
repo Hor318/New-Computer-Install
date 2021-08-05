@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2021 aar318
+Copyright (c) 2021 Aaron Horan
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
