@@ -14,82 +14,83 @@ _______________
 
 This is a summary of the script's functions
 
-1. Prerequisites for the script to run
+1. Installs Prerequisites for the script to run
   >    - Chocolatey
   >    - Nuget
   >    - Powershell 5.0+
   >    - PSWindowsUpdate Module
-2. Display a friendly Weather report
-3. Disable various settings and features 
+2. Display a friendly local Weather report
+3. Disable various settings and features
 4. Enable Plug and Play devices that may not be showing up
 5. Install missing drivers for devices
-6. Remove bloatware
+6. Remove bloatware (includes exception list)
 7. Set the timezone to Eastern
-8. Set update settings
+8. Set Windows Updates default settings
 9. Set various quality of life settings
 10. Tweak the interface display settings  
-11. Rename computer
+11. Rename computer if it is set to the default DESKTOP-whatever
 12. Offer to reboot to apply various changes
 
 _______________
 ## Features
 
 > The features listed apply to the system unless [User] is specified
-> This is a list of features, but not necessarily in the order they are executed
 
-    - Add This PC to the desktop [User]
-    - Adjust power settings to high performance
-    - Auto Arrange icons and align them to tiles [User]
-    - Cleanup misc installation / driver files
-    - Disable app suggestions and installation for OEM / Subscription apps [User]
-    - Disable fast startup
-    - Disable IPv6 Components without conflicting with the system
-    - Disable meet now [User]
-    - Disable news and interests from the taskbar [User]
-    - Disable show suggestions in the start menu [User]
-    - Disable smart screen through defender
-    - Disable windows from managing default printers [User]
-    - Discover PnP devices
-    - Display the network button on the lock screen
-    - Display the shutdown button on the lock screen
-    - Enable legacy F8 boot menu
-    - Enable legacy Windows Photo Viewer
-    - Enable restore points and set a default 10 gb of shadow copy storage
-    - Enable verbose login status messages
-    - Hide People Taskbar icon [User]
-    - Hide Task View on the taskbar [User]
-    - Hide Windows Ink Workspace [User]
-    - Install a basic set of software via chocolatey (7zip / Adobe Reader / Google Chrome / Java)
-    - Install missing drivers for hardware
-    - Install available detected windows updates
-    - Launch explorer processes in a separate process [User]
-    - Open File Explorer to This PC [User]
-    - Prevent windows from turning off network adapter to save power
-    - Remove bloatware except for defined exceptions [User]
-    - Scheduled task to clean up %temp% folder [User]
-    - Set allowed Windows Update hours
-    - Set computer name
-    - Set default control panel view [User]
-    - Set default time zone to Eastern
-    - Software Distribution cleanup
-    - Turn off App Suggestions [User]
-    - Turn off silent installation of Suggested Apps [User]
-    - Turn on Num Lock at startup
+> This is a list of features, but not necessarily in the order they are executed:
+
+  - Add 'This PC' to the desktop [User]
+  - Adjust power settings to high performance
+  - Auto Arrange icons and align them to tiles [User]
+  - Cleanup misc installation / driver files
+  - Disable app suggestions and installation for OEM / Subscription apps [User]
+  - Disable fast startup
+  - Disable IPv6 Components without conflicting with the system
+  - Disable meet now [User]
+  - Disable news and interests from the taskbar [User]
+  - Disable show suggestions in the start menu [User]
+  - Disable smart screen through defender
+  - Disable windows from managing default printers [User]
+  - Discover PnP devices
+  - Display the network button on the lock screen
+  - Display the shutdown button on the lock screen
+  - Enable legacy F8 boot menu
+  - Enable legacy Windows Photo Viewer
+  - Enable restore points and set a default 10 gb of shadow copy storage
+  - Enable verbose login status messages
+  - Hide People Taskbar icon [User]
+  - Hide Task View on the taskbar [User]
+  - Hide Windows Ink Workspace [User]
+  - Install a basic set of software via chocolatey (7zip / Adobe Reader / Google Chrome / Java)
+  - Install missing drivers for hardware
+  - Install available detected windows updates
+  - Launch explorer processes in a separate process [User]
+  - Open File Explorer to This PC [User]
+  - Prevent windows from turning off network adapter to save power
+  - Remove bloatware except for defined exceptions [User]
+  - Scheduled task to clean up %temp% folder [User]
+  - Set allowed Windows Update hours
+  - Set computer name
+  - Set default control panel view [User]
+  - Set default time zone to Eastern
+  - Software Distribution cleanup
+  - Turn off App Suggestions [User]
+  - Turn off silent installation of Suggested Apps [User]
+  - Turn on Num Lock at startup
 
 _______________
 > Additional features courtesy of Sophia script - https://github.com/farag2/Windows-10-Sophia-Script 
 
-    - Create a cleanup task for the software distribution folder
-    - Create a cleanup task for temporary files
-    - Disable app smart screen
-    - Disable app suggestions [User]
-    - Disable silent installing of apps [User]
-    - Disable windows from managing default printers [User]
-    - Disable windows ink workspace [User]
-    - Enable Num Lock on boot
-    - Set default control panel view to large icons
-    - Set Windows Explorer to launch in separate processes [User]
-    - Set Windows Explorer to launch to This PC
+  - Create a cleanup task for the software distribution folder
+  - Create a cleanup task for temporary files
+  - Disable app smart screen
+  - Disable app suggestions [User]
+  - Disable silent installing of apps [User]
+  - Disable windows from managing default printers [User]
+  - Disable windows ink workspace [User]
+  - Enable Num Lock on boot
+  - Set default control panel view to large icons
+  - Set Windows Explorer to launch in separate processes [User]
+  - Set Windows Explorer to launch to This PC
 
 _______________
 ### A detailed log of the installation process can be found here
