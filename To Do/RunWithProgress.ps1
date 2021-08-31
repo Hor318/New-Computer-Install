@@ -47,6 +47,44 @@ function RunWithProgress {
     return $result
 }
 
+$test1 = { 
+    Start-Sleep -s 4
+    return $true 
+}
+
+$test2 = { 
+    $test = Test-NetConnection 1.1.1.1
+      if ($test.PingSucceeded -eq $true) { 
+          return $true
+        } elseif ($test.PingSucceeded -eq $false) {
+          return $false
+        }
+    }
+
+$test3 = { 
+    #Get-Process 
+    start-sleep -s 1 
+    return $false 
+}
+
+$oscheck = {
+	$CurrentBuild = Get-ItemPropertyValue 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name CurrentBuild
+	if ($CurrentBuild -lt 19043) {
+		return $false
+	}
+	elseif ($CurrentBuild -ge 19043) {
+		return $true
+	}
+}
+
+
+""
+RunWithProgress -Text "Supported Windows version" -Task $oscheck -Exit $true | Out-Null
+RunWithProgress -Text "Encrypting computer using inpenetrable algorithm" -Task $test1 -Exit $false | Out-Null
+RunWithProgress -Text "Testing ability to penetrate" -Task $test2 -Exit $false | Out-Null
+RunWithProgress -Text "Ending example" -Task $test3 -Exit $false | Out-Null
+Pause
+
 <#
 Example
 # Check if supported OS build.
