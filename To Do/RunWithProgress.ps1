@@ -53,7 +53,7 @@ $test1 = {
 }
 
 $test2 = { 
-    $test = Test-Connection 8.8.8.8 
+    $test = Test-NetConnection 1.1.1.1
       if ($test.PingSucceeded -eq $true) { 
           return $true
         } elseif ($test.PingSucceeded -eq $false) {
