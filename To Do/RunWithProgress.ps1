@@ -52,7 +52,8 @@ $test1 = {
     return $true 
 }
 
-$test2 = { 
+$test2 = {
+    Function pingTest { 
     $test = Test-NetConnection 1.1.1.1
       if ($test.PingSucceeded -eq $true) { 
           return $true
@@ -60,6 +61,8 @@ $test2 = {
           return $false
         }
     }
+    pingTest
+}
 
 $test3 = { 
     #Get-Process 
@@ -81,7 +84,7 @@ $oscheck = {
 ""
 RunWithProgress -Text "Supported Windows version" -Task $oscheck -Exit $true | Out-Null
 RunWithProgress -Text "Encrypting computer using inpenetrable algorithm" -Task $test1 -Exit $false | Out-Null
-RunWithProgress -Text "Testing ability to penetrate" -Task $test2 -Exit $false | Out-Null
+RunWithProgress -Text "Testing ability to penetrate" -Task $test2 -Exit $true | Out-Null
 RunWithProgress -Text "Ending example" -Task $test3 -Exit $false | Out-Null
 Pause
 
