@@ -1,0 +1,21 @@
+Instructions:
+
+1. Open File
+2. Edit manifest record
+3. Change the following
+
+<requestedPrivileges>
+  <requestedExecutionLevel
+  level="asInvoker"
+  uiAccess="false"
+/>
+</requestedPrivileges>
+
+to
+
+<requestedPrivileges>
+  <requestedExecutionLevel
+  level="requireAdministrator"
+  uiAccess="false"
+/>
+</requestedPrivileges>
