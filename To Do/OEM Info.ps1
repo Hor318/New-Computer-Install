@@ -8,7 +8,7 @@ Function AddOEMInfo {
   $regStrings = @{
     'Logo' = 'C:\Windows\System32\oemlogo.bmp'
     'Manufacturer' = 'Omnis Computers'
-    'SupportPhone' = '(518)372-7829'
+    'SupportPhone' = '(518) 372-7829'
     'SupportURL' = 'https://www.omniscomputers.com'
   }
   
