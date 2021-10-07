@@ -21,6 +21,10 @@ Function AddOEMInfo {
   } Else { 
     Write-Host "[$(timeStamp)] The Logo value is missing. Adding the following value [$($regStrings.Logo)]." -ForegroundColor Gray
     reg add $regKeyAdd /v 'Logo' /t REG_SZ /d $regStrings.Logo /f 
+      If (!(Test-Path $regStrings.Logo)) { 
+        Write-Host "[$(timeStamp)] The Logo is missing from directory [$($regStrings.Logo)]. Attempting to copy it now." -ForegroundColor Gray
+        Copy-Item -Path .\Dependencies\oemlogo.bmp -Destination $regStrings.Logo -Force 
+      }
   }    
   If ( $value.Manufacturer -is [string] ) { 
     Write-Host "[$(timeStamp)] The Manufacturer value exists already [$($value.Manufacturer)]. Please remove this if you would like to replace the existing value." -ForegroundColor Gray
