@@ -19,17 +19,18 @@ This is a summary of the script's functions
   >    - Nuget
   >    - Powershell 5.0+
   >    - PSWindowsUpdate Module
-2. Display a friendly local Weather report
-3. Disable various settings and features
-4. Enable Plug and Play devices that may not be showing up
-5. Install missing drivers for devices
-6. Remove bloatware (includes exception list)
-7. Set the timezone to Eastern
-8. Set Windows Updates default settings
-9. Set various quality of life settings
-10. Tweak the interface display settings  
-11. Rename computer if it is set to the default DESKTOP-whatever
-12. Offer to reboot to apply various changes
+2. Modify OEM Information if it is missing
+3. Display a friendly local Weather report
+4. Disable various settings and features
+5. Enable Plug and Play devices that may not be showing up
+6. Install missing drivers for devices
+7. Remove bloatware (includes exception list)
+8. Set the timezone to Eastern (customize via function parameters)
+9. Set Windows Updates default settings
+10. Set various quality of life settings
+11. Tweak the interface display settings  
+12. Rename computer if it is set to the default DESKTOP-whatever
+13. Offer to reboot to apply various changes
 
 _______________
 ## Features
@@ -64,6 +65,7 @@ _______________
     - Install missing drivers for hardware
     - Install available detected windows updates
     - Launch explorer processes in a separate process [User]
+    - Modify OEM Information if it does not already exist
     - Open File Explorer to This PC [User]
     - Prevent windows from turning off network adapter to save power
     - Remove bloatware except for defined exceptions [User]
