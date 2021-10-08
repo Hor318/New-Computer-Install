@@ -1,7 +1,10 @@
 _______________
 # New-Computer-Install
 
->! Use at your own risk. I am not responsible for any damage that may be caused by running this script. It is expected that you will fully read the script prior to running on any production systems!
+```diff
+- !! USE AT YOUR OWN RISK. I am not responsible for any damage that may be caused by running this script
+-      It is expected that you will fully read the script prior to running on any production systems !!
+```
 _______________
 ## How do I run this?
 
@@ -9,27 +12,30 @@ It's easy! Either download the .ps1 file, right click, and run with powershell..
 > [Releases](https://github.com/aar318/New-Computer-Install/releases)
 
 After you run it the program will prompt for admin credentials and then just follow the on screen prompts (95% automated currently with a couple of confirmation prompts and a computer name change)
+
+If you would like to compile it yourself you will need to compile the powershell files and dependencies using a .net compiler and then modify the compiled exe's manifest to self elevate. 
 _______________
 ## What does it do?
 
 This is a summary of the script's functions
 
 1. Installs Prerequisites for the script to run
-  >    - Chocolatey
-  >    - Nuget
-  >    - Powershell 5.0+
-  >    - PSWindowsUpdate Module
-2. Display a friendly local Weather report
-3. Disable various settings and features
-4. Enable Plug and Play devices that may not be showing up
-5. Install missing drivers for devices
-6. Remove bloatware (includes exception list)
-7. Set the timezone to Eastern
-8. Set Windows Updates default settings
-9. Set various quality of life settings
-10. Tweak the interface display settings  
-11. Rename computer if it is set to the default DESKTOP-whatever
-12. Offer to reboot to apply various changes
+      - Chocolatey
+      - Nuget
+      - Powershell 5.0+
+      - PSWindowsUpdate Module
+2. Modify OEM Information if it is missing
+3. Display a friendly local Weather report
+4. Disable various settings and features
+5. Enable Plug and Play devices that may not be showing up
+6. Install missing drivers for devices
+7. Remove bloatware (includes exception list)
+8. Set the timezone to Eastern (customize via function parameters)
+9. Set Windows Updates default settings
+10. Set various quality of life settings
+11. Tweak the interface display settings  
+12. Rename computer if it is set to the default DESKTOP-whatever
+13. Offer to reboot to apply various changes
 
 _______________
 ## Features
@@ -64,6 +70,7 @@ _______________
     - Install missing drivers for hardware
     - Install available detected windows updates
     - Launch explorer processes in a separate process [User]
+    - Modify OEM Information if it does not already exist
     - Open File Explorer to This PC [User]
     - Prevent windows from turning off network adapter to save power
     - Remove bloatware except for defined exceptions [User]
@@ -78,7 +85,7 @@ _______________
     - Turn on Num Lock at startup
 
 _______________
-> Additional features courtesy of Sophia script - https://github.com/farag2/Windows-10-Sophia-Script 
+> Additional features courtesy of [Sophia script](https://github.com/farag2/Windows-10-Sophia-Script)
 
     - Create a cleanup task for the software distribution folder
     - Create a cleanup task for temporary files
