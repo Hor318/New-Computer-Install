@@ -1,7 +1,10 @@
 _______________
 # New-Computer-Install
 
->! Use at your own risk. I am not responsible for any damage that may be caused by running this script. It is expected that you will fully read the script prior to running on any production systems!
+```diff
+- !! USE AT YOUR OWN RISK. I am not responsible for any damage that may be caused by running this script
+-      It is expected that you will fully read the script prior to running on any production systems !!
+```
 _______________
 ## How do I run this?
 
