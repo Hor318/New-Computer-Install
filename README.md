@@ -9,6 +9,8 @@ It's easy! Either download the .ps1 file, right click, and run with powershell..
 > [Releases](https://github.com/aar318/New-Computer-Install/releases)
 
 After you run it the program will prompt for admin credentials and then just follow the on screen prompts (95% automated currently with a couple of confirmation prompts and a computer name change)
+
+If you would like to compile it yourself you will need to compile the powershell files and dependencies using a .net compiler and then modify the compiled exe's manifest to self elevate. 
 _______________
 ## What does it do?
 
@@ -80,7 +82,7 @@ _______________
     - Turn on Num Lock at startup
 
 _______________
-> Additional features courtesy of Sophia script - https://github.com/farag2/Windows-10-Sophia-Script 
+> Additional features courtesy of [Sophia script](https://github.com/farag2/Windows-10-Sophia-Script)
 
     - Create a cleanup task for the software distribution folder
     - Create a cleanup task for temporary files
