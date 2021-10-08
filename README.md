@@ -20,10 +20,10 @@ _______________
 This is a summary of the script's functions
 
 1. Installs Prerequisites for the script to run
-  >    - Chocolatey
-  >    - Nuget
-  >    - Powershell 5.0+
-  >    - PSWindowsUpdate Module
+      - Chocolatey
+      - Nuget
+      - Powershell 5.0+
+      - PSWindowsUpdate Module
 2. Modify OEM Information if it is missing
 3. Display a friendly local Weather report
 4. Disable various settings and features
