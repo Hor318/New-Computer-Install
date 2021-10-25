@@ -14,6 +14,8 @@ It's easy! Either download the .ps1 file, right click, and run with powershell..
 After you run it the program will prompt for admin credentials and then just follow the on screen prompts (95% automated currently with a couple of confirmation prompts and a computer name change)
 
 If you would like to compile it yourself you will need to compile the powershell files and dependencies using a .net compiler and then modify the compiled exe's manifest to self elevate. 
+
+*Alternatively you can run the [New Computer Install Downloader.ps1](https://github.com/Hor318/New-Computer-Install/blob/main/New%20Computer%20Install%20Downloader.ps1) to download the latest version and launch it automatically*
 _______________
 ## What does it do?
 
