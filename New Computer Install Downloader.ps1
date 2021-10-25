@@ -7,21 +7,20 @@ If (!( [Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity
 }
 
 $repo = "Hor318/New-Computer-Install"
-#$owner = $repo -split '/' | Select -First 1
-#$repoName = $repo -split '/' | Select -Last 1
+#$owner = $repo -Split '/' | Select -First 1
+#$repoName = $repo -Split '/' | Select -Last 1
 
 $filenamePattern = "*New.Computer.Install.exe*"
 
 $preRelease = $false
 
 $version = Invoke-WebRequest -Uri "https://api.github.com/repos/Hor318/New-Computer-Install/releases/latest" -UseBasicParsing
-$version = ($version.content | ConvertFrom-Json).tag_name
+$version = ( $version.content | ConvertFrom-Json ).tag_name
 
-if ($preRelease) {
+If ( $preRelease ) {
     $releasesUri = "https://api.github.com/repos/$repo/releases"
     $downloadUri = (( Invoke-RestMethod -Method GET -Uri $releasesUri )[0].assets | Where-Object name -like $filenamePattern ).browser_download_url
-}
-else {
+} Else {
     $releasesUri = "https://api.github.com/repos/$repo/releases/latest"
     $downloadUri = (( Invoke-RestMethod -Method GET -Uri $releasesUri ).assets | Where-Object name -like $filenamePattern ).browser_download_url
 }
@@ -31,11 +30,12 @@ $pathFile = "$env:Public\Desktop\New.Computer.Install $version.exe"
 
 If ( Test-Path "$pathNoVer*.exe" ) { 
   ForEach ( $p in $( Get-ChildItem "$pathNoVer*.exe" )) {
-    Write-Warning "File [$($p.FullName)] found. Removing and redownloading" 
+    Write-Warning "File [$( $p.FullName )] found. Removing and redownloading" 
   }
 
   Remove-Item "$pathNoVer*.exe" -Force 
 }
+
   Invoke-WebRequest -Uri $downloadUri -Out $pathFile #$pathZip
 
   # Start .exe and run prerequisites if choco is not detected
