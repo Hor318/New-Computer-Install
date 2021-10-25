@@ -47,8 +47,8 @@ If ( Test-Path "$pathNoVer*.exe" ) {
   
   # Remove prerequisite log
   $winTemp = [System.Environment]::GetEnvironmentVariable('TEMP','Machine')
-  $fileContent = Get-ChildItem $winTemp | Where-Object {$_.Name -like "New Computer Install*"} | Sort-Object LastWriteTime -Descending | Select-Object -First 1 
-    If ($fileContent.Length -lt '5000') {Remove-Item $fileContent.FullName -Force}
+  $fileContent = Get-ChildItem $winTemp | Where-Object { $_.Name -like "New Computer Install*" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1 
+    If ( $fileContent.Length -lt '5000' ) { Remove-Item $fileContent.FullName -Force }
 
   Start-Process $pathFile -Wait -Verb Runas
 
