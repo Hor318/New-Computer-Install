@@ -42,7 +42,6 @@ If ( Test-Path "$pathNoVer*.exe" ) {
   $TARGETDIR = 'C:\ProgramData\Chocolatey\choco.exe'
   If (!( Test-Path -Path $TARGETDIR )) {
     Start-Process $pathFile -Wait -Verb Runas
-        Exit
   }
   
   # Remove prerequisite log
