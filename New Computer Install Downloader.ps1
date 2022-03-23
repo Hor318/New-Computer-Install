@@ -9,8 +9,8 @@ If (!( [Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity
 Set-ExecutionPolicy RemoteSigned -force
 
 $repo = "Hor318/New-Computer-Install"
-#$owner = $repo -Split '/' | Select -First 1
-#$repoName = $repo -Split '/' | Select -Last 1
+$owner = $repo -Split '/' | Select -First 1
+$repoName = $repo -Split '/' | Select -Last 1
 
 $filenamePattern = "*New.Computer.Install.exe*"
 
@@ -38,19 +38,28 @@ If ( Test-Path "$pathNoVer*.exe" ) {
     Remove-Item "$pathNoVer*.exe" -Force 
 }
 
-    Invoke-WebRequest -Uri $downloadUri -Out $pathFile #$pathZip
+# Defender exclusions to allow .exe to run
+Add-MpPreference -ExclusionPath "$env:TEMP\Quest Software"
+Add-MpPreference -ControlledFolderAccessAllowedApplications $pathFile
 
-    # Start .exe and run prerequisites if choco is not detected
-    $TARGETDIR = 'C:\ProgramData\Chocolatey\choco.exe'
-        If (!( Test-Path -Path $TARGETDIR )) {
-            Start-Process $pathFile -Wait -Verb Runas
-        }
-  
-    # Remove prerequisite log
-    $winTemp = [System.Environment]::GetEnvironmentVariable('TEMP','Machine')
-    $fileContent = Get-ChildItem $winTemp | Where-Object { $_.Name -like "New Computer Install*" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1 
-        If ( $fileContent.Length -lt '5000' ) { Remove-Item $fileContent.FullName -Force }
+Invoke-WebRequest -Uri $downloadUri -Out $pathFile #$pathZip
+    Write-Output "Variable Summary: `nOwner: [$owner] `nRepo Name: [$repoName] `nFilename Pattern: [$filenamePattern] `nPath Extract: [$pathExtract] `nInner Directory [$innerDirectory]"
 
-    Start-Process $pathFile -Wait -Verb Runas
+# Start .exe and run prerequisites if choco is not detected
+$TARGETDIR = 'C:\ProgramData\Chocolatey\choco.exe'
+    If (!( Test-Path -Path $TARGETDIR )) {
+        Start-Process $pathFile -Wait -Verb Runas
+    }
+
+# Remove prerequisite log
+$winTemp = [System.Environment]::GetEnvironmentVariable('TEMP','Machine')
+$fileContent = Get-ChildItem $winTemp | Where-Object { $_.Name -like "New Computer Install*" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1 
+    If ( $fileContent.Length -lt '5000' ) { Remove-Item $fileContent.FullName -Force }
+
+Start-Process $pathFile -Wait -Verb Runas
 
 Remove-Item $pathFile -Force
+
+# Remove Defender exclusions to allow .exe to run
+Remove-MpPreference -ExclusionPath "$env:TEMP\Quest Software"
+Remove-MpPreference -ControlledFolderAccessAllowedApplications $pathFile
