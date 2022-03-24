@@ -1,7 +1,12 @@
 ﻿aaron-bond.better-comments
+bmuskalla.vscode-tldr
 christian-kohler.path-intellisense
+chrmarti.regex
 CoenraadS.bracket-pair-colorizer-2
 eamodio.gitlens
+formulahendry.code-runner
+LouisWT.regexp-preview
+mechatroner.rainbow-csv
 mhutchie.git-graph
 ms-dotnettools.dotnet-interactive-vscode
 ms-toolsai.jupyter
