@@ -1,0 +1,16 @@
+﻿aaron-bond.better-comments
+christian-kohler.path-intellisense
+CoenraadS.bracket-pair-colorizer-2
+eamodio.gitlens
+mhutchie.git-graph
+ms-dotnettools.dotnet-interactive-vscode
+ms-toolsai.jupyter
+ms-toolsai.jupyter-keymap
+ms-toolsai.jupyter-renderers
+ms-vscode.powershell
+ms-vsliveshare.vsliveshare
+oderwat.indent-rainbow
+redhat.vscode-yaml
+RobOwens.powershell-extenstion-pack
+usernamehw.errorlens
+vscode-icons-team.vscode-icons
