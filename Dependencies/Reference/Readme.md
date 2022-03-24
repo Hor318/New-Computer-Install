@@ -1,5 +1,5 @@
 
-### <u>Little cheat sheet</u>
+### VSCode Extensions cheat sheet
 
 - Code Runner : `ctrl + alt + n` or right click and select `Run Code`
 - Expand Aliases : `shift + alt + e`
