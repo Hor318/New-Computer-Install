@@ -9,8 +9,8 @@ If (!( [Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity
 Set-ExecutionPolicy RemoteSigned -force
 
 $repo = "Hor318/New-Computer-Install"
-$owner = $repo -Split '/' | Select -First 1
-$repoName = $repo -Split '/' | Select -Last 1
+$owner = $repo -Split '/' | Select-Object -First 1
+$repoName = $repo -Split '/' | Select-Object -Last 1
 
 $filenamePattern = "*New.Computer.Install.exe*"
 
