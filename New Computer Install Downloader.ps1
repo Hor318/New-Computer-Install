@@ -58,6 +58,17 @@ $fileContent = Get-ChildItem $winTemp | Where-Object { $_.Name -like "New Comput
 
 Start-Process $pathFile -Wait -Verb Runas
 
+1..10 | ForEach-Object {
+    If ( Test-Path "$env:PROGRAMFILES\Google\Chrome\Application\chrome.exe" ) { Continue } Else {
+        choco upgrade googlechrome -y --limit-output
+        start-sleep -s 1
+    }
+    If ( Test-Path "$env:PROGRAMFILES\7-Zip\7zFM.exe" ) { Continue } Else {
+        choco upgrade 7zip -y --limit-output
+        start-sleep -s 1
+    }
+}   
+
 Remove-Item $pathFile -Force
 
 # Remove Defender exclusions to allow .exe to run
