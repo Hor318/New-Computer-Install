@@ -56,17 +56,6 @@ $winTemp = [System.Environment]::GetEnvironmentVariable('TEMP','Machine')
 $fileContent = Get-ChildItem $winTemp | Where-Object { $_.Name -like "New Computer Install*" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1 
     If ( $fileContent.Length -lt '5000' ) { Remove-Item $fileContent.FullName -Force }
 
-    1..10 | ForEach-Object {
-        If ( Test-Path "$env:PROGRAMFILES\Google\Chrome\Application\chrome.exe" ) { Continue } Else {
-            choco upgrade googlechrome -y --limit-output
-            start-sleep -s 1
-        }
-        If ( Test-Path "$env:PROGRAMFILES\7-Zip\7zFM.exe" ) { Continue } Else {
-            choco upgrade 7zip -y --limit-output
-            start-sleep -s 1
-        }
-    }  
-
 Start-Process $pathFile -Wait -Verb Runas 
 
 Remove-Item $pathFile -Force
