@@ -8,7 +8,6 @@ Version: 1.4.2
     - Added function to Block Apps from downloading automatically
     - Added function to disable User Experience Reporting
     - Added function to disable the first logon animation "Hi! We're installing the apps..."
-
 ------------------------------------------------------------------
 Version: 1.4.1
     - Updated chrome function to include a fallback method in case chocolatey failed
@@ -53,3 +52,60 @@ Version: 1.3.0
     - Initial github release - see readme.md for info
     - Migrated local script + dependencies to github
 
+This is a list of features, but not necessarily in the order they are executed:
+
+    - Add 'This PC' to the desktop [User]
+    - Adjust power settings to high performance
+    - Auto Arrange icons and align them to tiles [User]
+    - Cleanup misc installation / driver files
+    - Disable app suggestions and installation for OEM / Subscription apps [User]
+    - Disable fast startup
+    - Disable IPv6 Components without conflicting with the system
+    - Disable meet now [User]
+    - Disable news and interests from the taskbar [User]
+    - Disable show suggestions in the start menu [User]
+    - Disable smart screen through defender
+    - Disable windows from managing default printers [User]
+    - Discover PnP devices
+    - Display the network button on the lock screen
+    - Display the shutdown button on the lock screen
+    - Enable legacy F8 boot menu
+    - Enable legacy Windows Photo Viewer
+    - Enable restore points and set a default 10 gb of shadow copy storage
+    - Enable verbose login status messages
+    - Hide People Taskbar icon [User]
+    - Hide Task View on the taskbar [User]
+    - Hide Windows Ink Workspace [User]
+    - Install a basic set of software via chocolatey (7zip / Adobe Reader / Google Chrome / Java)
+    - Install missing drivers for hardware
+    - Install available detected windows updates
+    - Launch explorer processes in a separate process [User]
+    - Modify OEM Information if it does not already exist
+    - Open File Explorer to This PC [User]
+    - Prevent windows from turning off network adapter to save power
+    - Remove bloatware except for defined exceptions [User]
+    - Scheduled task to clean up %temp% folder [User]
+    - Set allowed Windows Update hours
+    - Set computer name
+    - Set default control panel view [User]
+    - Set default time zone to Eastern
+    - Software Distribution cleanup
+    - Turn off App Suggestions [User]
+    - Turn off silent installation of Suggested Apps [User]
+    - Turn on Num Lock at startup
+
+_______________
+> Additional features courtesy of [Sophia script](https://github.com/farag2/Windows-10-Sophia-Script)
+
+    - Create a cleanup task for the software distribution folder
+    - Create a cleanup task for temporary files
+    - Disable app smart screen
+    - Disable app suggestions [User]
+    - Disable silent installing of apps [User]
+    - Disable windows from managing default printers [User]
+    - Disable windows ink workspace [User]
+    - Enable Num Lock on boot
+    - Set default control panel view to large icons
+    - Set Windows Explorer to launch in separate processes [User]
+    - Set Windows Explorer to launch to This PC
+------------------------------------------------------------------

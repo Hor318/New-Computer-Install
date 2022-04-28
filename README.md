@@ -8,8 +8,10 @@ _______________
 _______________
 ## How do I run this?
 
-It's easy! Either download the .ps1 file, right click, and run with powershell... Or download the latest release from the release page
+It's easy! Either download the .ps1 file, right click, and run with powershell... Or download the latest release from the release page (see changelog below for changes)
 > [Releases](https://github.com/aar318/New-Computer-Install/releases)
+
+> [ChangeLog](https://github.com/Hor318/New-Computer-Install/blob/main/Changelog.txt)
 
 After you run it the program will prompt for admin credentials and then just follow the on screen prompts (95% automated currently with a couple of confirmation prompts and a computer name change)
 
@@ -51,12 +53,15 @@ _______________
     - Auto Arrange icons and align them to tiles [User]
     - Cleanup misc installation / driver files
     - Disable app suggestions and installation for OEM / Subscription apps [User]
+    - Disable automatic downloading of apps
     - Disable fast startup
+    - Disable first login animation (Hi! We're installing...)
     - Disable IPv6 Components without conflicting with the system
     - Disable meet now [User]
     - Disable news and interests from the taskbar [User]
     - Disable show suggestions in the start menu [User]
     - Disable smart screen through defender
+    - Disable User Experience Reporting [User]
     - Disable windows from managing default printers [User]
     - Discover PnP devices
     - Display the network button on the lock screen
@@ -68,7 +73,7 @@ _______________
     - Hide People Taskbar icon [User]
     - Hide Task View on the taskbar [User]
     - Hide Windows Ink Workspace [User]
-    - Install a basic set of software via chocolatey (7zip / Adobe Reader / Google Chrome / Java)
+    - Install a basic set of software via chocolatey (7zip / Adobe Reader / Google Chrome / Java) - **Note: I have added a backup method for chrome due to consistent issues with the chocolatey method**
     - Install missing drivers for hardware
     - Install available detected windows updates
     - Launch explorer processes in a separate process [User]
@@ -78,9 +83,9 @@ _______________
     - Remove bloatware except for defined exceptions [User]
     - Scheduled task to clean up %temp% folder [User]
     - Set allowed Windows Update hours
-    - Set computer name
+    - Set computer name (checks for default names and prompts to rename)
     - Set default control panel view [User]
-    - Set default time zone to Eastern
+    - Set default time zone to Eastern (can specify timezone via parameter)
     - Software Distribution cleanup
     - Turn off App Suggestions [User]
     - Turn off silent installation of Suggested Apps [User]
