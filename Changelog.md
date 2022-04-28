@@ -1,54 +1,53 @@
 _____________________
 # Changelog
-### Newly added features will be updated here. Eventually I will add older versions to the best of my memory. 20/20 hindsight and stuff.
-_____________________
+### Newly added features will be updated here. I have added the old versions to the best of my ability.
 
 ------------------------------------------------------------------
-Version: 1.4.2
+##### Version: 1.4.2
     - Added function to Block Apps from downloading automatically
     - Added function to disable User Experience Reporting
     - Added function to disable the first logon animation "Hi! We're installing the apps..."
 ------------------------------------------------------------------
-Version: 1.4.1
+##### Version: 1.4.1
     - Updated chrome function to include a fallback method in case chocolatey failed
 ------------------------------------------------------------------
-Version: 1.4.0
+##### Version: 1.4.0
     - Added a loop to attempt to resolve chrome / 7zip install (*fixed in 1.4.1 with a fallback for chrome -- 7 zip was working properly)
 ------------------------------------------------------------------
-Version: 1.3.9
+##### Version: 1.3.9
     - Internal update to fix formatting to tabbed indentation (4x spaces) globally
 ------------------------------------------------------------------
-Version: 1.3.8
+##### Version: 1.3.8
     - Update code for legacy windows photo viewer to add reg keys and associations instead of importing reg file
     - Updated function for photo viewer to include Parameters
 ------------------------------------------------------------------
-Version: 1.3.7
+##### Version: 1.3.7
     - Updated rename computer name function to also include default server names in the check
     - Added secondary software update check and edited text in module updater
     - Created a downloader script to retrieve the newest binary from github and call the main scripts
 ------------------------------------------------------------------
-Version: 1.3.6
+##### Version: 1.3.6
     - Added a check for OEM information. Creates information if it is missing and copies over logo if missing
 ------------------------------------------------------------------
-Version: 1.3.5
+##### Version: 1.3.5
     - Updated relaunch function to attempt to avoid crashing and added elapsed time into the script
     - Updated binary manifest to require administrative rights and added instructions to do this in Dependencies
 ------------------------------------------------------------------
-Version: 1.3.4
+##### Version: 1.3.4
     - Code cleanup and improvements on logging
     - Updated function for the time zone to support Parameters
 ------------------------------------------------------------------
-Version: 1.3.3
+##### Version: 1.3.3
     - Changed call order of WindowsUpdate function to an earlier time due to a potential restart background
 ------------------------------------------------------------------
-Version: 1.3.2
+##### Version: 1.3.2
     - Updated WindowsUpdate function to include an automated GUI interaction for better results
 ------------------------------------------------------------------
-Version: 1.3.1
+##### Version: 1.3.1
     - Massive code cleanup
     - Added a check for the computer name during the Rename Computer function
 ------------------------------------------------------------------
-Version: 1.3.0
+##### Version: 1.3.0
     - Initial github release - see readme.md for info
     - Migrated local script + dependencies to github
 
