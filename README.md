@@ -11,7 +11,7 @@ _______________
 It's easy! Either download the .ps1 file, right click, and run with powershell... Or download the latest release from the release page (see changelog below for changes)
 > [Releases](https://github.com/aar318/New-Computer-Install/releases)
 
-> [ChangeLog](https://github.com/Hor318/New-Computer-Install/blob/main/Changelog.txt)
+> [ChangeLog](https://github.com/Hor318/New-Computer-Install/blob/main/Changelog.md)
 
 After you run it the program will prompt for admin credentials and then just follow the on screen prompts (95% automated currently with a couple of confirmation prompts and a computer name change)
 
