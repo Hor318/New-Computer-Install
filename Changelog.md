@@ -4,7 +4,7 @@ _____________________
 
 ------------------------------------------------------------------
 ##### Version: 1.4.3
-    - Added function to restore Win10 context menu on Win11 - **Note: This will not run on any devices lower than build 22000 (Win11)**
+    - Added function to restore Win10 context menu on Win11 - *Note: This will not run on any devices lower than build 22000 (Win11)*
 ------------------------------------------------------------------
 ##### Version: 1.4.2
     - Added function to Block Apps from downloading automatically
