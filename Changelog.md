@@ -7,6 +7,7 @@ _____________________
     - Added function to Block Apps from downloading automatically
     - Added function to disable User Experience Reporting
     - Added function to disable the first logon animation "Hi! We're installing the apps..."
+    - Added additional exception to bloatware removal for Win11 Notepad app
 ------------------------------------------------------------------
 ##### Version: 1.4.1
     - Updated chrome function to include a fallback method in case chocolatey failed
