@@ -8,7 +8,7 @@ _______________
 _______________
 ## How do I run this?
 
-**Note: You may need to set your execution policy for it to run smoothly. To do so open an elevated powershell session, type ``` Set-ExecutionPolicy RemoteSigned ``` and hit Enter**
+*Note: You may need to set your execution policy for it to run smoothly. To do so open an elevated powershell session, type ``` Set-ExecutionPolicy RemoteSigned ``` and hit Enter*
 
 It's easy! Either download the .ps1 file, right click, and run with powershell... Or download the latest release from the release page (see changelog below for changes)
 > [Releases](https://github.com/aar318/New-Computer-Install/releases)
