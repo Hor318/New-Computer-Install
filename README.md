@@ -10,7 +10,7 @@ _______________
 
 *Note: You may need to set your execution policy for it to run smoothly. To do so open an elevated powershell session, type ``` Set-ExecutionPolicy RemoteSigned ``` and hit Enter*
 
-It's easy! Either download the .ps1 file, right click, and run with powershell (Additional option to now use [This-Batch-File]("https://github.com/aar318/New-Computer-Install/New Computer Install Launch.bat") )... Or download the latest release from the release page (see changelog below for changes)
+It's easy! Either download the .ps1 file, right click, and run with powershell (Additional option to now use [This-Batch-File](https://github.com/Hor318/New-Computer-Install/blob/main/New%20Computer%20Install%20Launch.bat) )... Or download the latest release from the release page (see changelog below for changes)
 > [Releases](https://github.com/aar318/New-Computer-Install/releases)
 
 > [ChangeLog](https://github.com/Hor318/New-Computer-Install/blob/main/Changelog.md)
