@@ -3,6 +3,9 @@ _____________________
 ### Newly added features will be updated here. I have added the old versions to the best of my ability.
 
 ------------------------------------------------------------------
+##### Version: 1.4.4
+    - Improved bloatware removal
+------------------------------------------------------------------
 ##### Version: 1.4.3
     - Added function to restore Win10 context menu on Win11 - *Note: This will not run on any devices lower than build 22000 (Win11)*
 ------------------------------------------------------------------
