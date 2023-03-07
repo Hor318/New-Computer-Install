@@ -55,6 +55,7 @@ _______________
     - Adjust power settings to high performance
     - Auto Arrange icons and align them to tiles [User]
     - Cleanup misc installation / driver files
+    - Detects and installs drivers for GPU
     - Disable app suggestions and installation for OEM / Subscription apps [User]
     - Disable automatic downloading of apps
     - Disable fast startup
