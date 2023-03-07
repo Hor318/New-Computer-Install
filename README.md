@@ -30,6 +30,7 @@ This is a summary of the script's functions
       - Nuget
       - Powershell 5.0+
       - PSWindowsUpdate Module
+      - Detects and installs drivers for GPU
 2. Modify OEM Information if it is missing
 3. Display a friendly local Weather report
 4. Disable various settings and features
