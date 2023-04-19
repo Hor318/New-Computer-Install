@@ -85,6 +85,7 @@ _______________
     - Open File Explorer to This PC [User]
     - Prevent windows from turning off network adapter to save power
     - Remove bloatware except for defined exceptions [User]
+    - Remove widget for news, weather, alerts, etc. from taskbar in Win11
     - Revert context menu to Win10 (no "More Options" in Win11)
     - Scheduled task to clean up %temp% folder [User]
     - Set allowed Windows Update hours

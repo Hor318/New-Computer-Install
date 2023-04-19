@@ -3,6 +3,9 @@ _____________________
 ### Newly added features will be updated here. I have added the old versions to the best of my ability.
 
 ------------------------------------------------------------------
+##### Version: 1.4.6
+    - Removed weather widget on windows 11 PC's
+------------------------------------------------------------------
 ##### Version: 1.4.5
     - Add GPU detection (AMD + NVIDIA) + driver installation as part of the prerequisites 
 ------------------------------------------------------------------
