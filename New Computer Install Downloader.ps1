@@ -1,65 +1,59 @@
-﻿
 # Modified from https://gist.github.com/Splaxi/fe168eaa91eb8fb8d62eba21736dc88a
 
-If (!( [Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole( [Security.Principal.WindowsBuiltInRole]::Administrator )) {
-    Start-Process powershell.exe "-File",( '"{0}"' -f $MyInvocation.MyCommand.Path ) -Verb RunAs
+Param ([switch]$Gui)
+
+$ProgressPreference = 'SilentlyContinue'
+
+# Safety net: re-launch as admin if not already elevated
+If (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    $elevationArguments = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$MyInvocation.MyCommand.Path)
+    If ($Gui) { $elevationArguments += '-Gui' }
+    Start-Process powershell.exe -ArgumentList $elevationArguments -Verb RunAs
     Exit
 }
 
-Set-ExecutionPolicy RemoteSigned -force
+$repo            = "Hor318/New-Computer-Install"
+$filenamePattern = "*New*Computer*Install*.exe"
+$preRelease      = $false
 
-$repo = "Hor318/New-Computer-Install"
-$owner = $repo -Split '/' | Select-Object -First 1
-$repoName = $repo -Split '/' | Select-Object -Last 1
-
-$filenamePattern = "*New.Computer.Install.exe*"
-
-$preRelease = $false
-
-$version = Invoke-WebRequest -Uri "https://api.github.com/repos/Hor318/New-Computer-Install/releases/latest" -UseBasicParsing
-$version = ( $version.content | ConvertFrom-Json ).tag_name
-
-If ( $preRelease ) {
-    $releasesUri = "https://api.github.com/repos/$repo/releases"
-    $downloadUri = (( Invoke-RestMethod -Method GET -Uri $releasesUri )[0].assets | Where-Object name -like $filenamePattern ).browser_download_url
+# Fetch release data in a single API call
+If ($preRelease) {
+    $releaseData = (Invoke-RestMethod -Method GET -Uri "https://api.github.com/repos/$repo/releases")[0]
 } Else {
-    $releasesUri = "https://api.github.com/repos/$repo/releases/latest"
-    $downloadUri = (( Invoke-RestMethod -Method GET -Uri $releasesUri ).assets | Where-Object name -like $filenamePattern ).browser_download_url
+    $releaseData = Invoke-RestMethod -Method GET -Uri "https://api.github.com/repos/$repo/releases/latest"
+}
+
+$version = $releaseData.tag_name
+$asset = $releaseData.assets | Where-Object name -like $filenamePattern | Select-Object -First 1
+$downloadUri = $asset.browser_download_url
+
+If (-not $downloadUri) {
+    Write-Error "Could not find a release asset matching '$filenamePattern'. Aborting."
+    Exit 1
 }
 
 $pathNoVer = "$env:Public\Desktop\New.Computer.Install"
-$pathFile = "$env:Public\Desktop\New.Computer.Install $version.exe"
+$pathFile  = "$env:Public\Desktop\New.Computer.Install $version.exe"
+$downloadFile = Join-Path $env:TEMP ([IO.Path]::GetRandomFileName() + '.exe')
 
-If ( Test-Path "$pathNoVer*.exe" ) { 
-    ForEach ( $p in $( Get-ChildItem "$pathNoVer*.exe" )) {
-        Write-Warning "File [$( $p.FullName )] found. Removing and redownloading" 
+Try {
+    Write-Output "Downloading version [$version] from [$downloadUri]"
+    Invoke-WebRequest -Uri $downloadUri -OutFile $downloadFile -UseBasicParsing -ErrorAction Stop
+    Write-Output "Download complete: $([Math]::Round((Get-Item $downloadFile).Length / 1MB,2)) MB"
+
+    If ($asset.digest -match '^sha256:(?<Hash>[0-9a-fA-F]{64})$') {
+        $actualHash = (Get-FileHash -LiteralPath $downloadFile -Algorithm SHA256).Hash
+        If ($actualHash -ne $Matches.Hash) { Throw "Release checksum mismatch. Expected [$($Matches.Hash)], received [$actualHash]." }
+        Write-Output 'GitHub release SHA-256 verified.'
+    } Else {
+        Write-Warning 'This release does not publish a SHA-256 digest; HTTPS transport is the only integrity check.'
     }
 
-    Remove-Item "$pathNoVer*.exe" -Force 
+    Get-ChildItem "$pathNoVer*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force
+    Move-Item -LiteralPath $downloadFile -Destination $pathFile -Force
+    If ($Gui) { Start-Process $pathFile -ArgumentList '-Gui' -Wait -Verb RunAs }
+    Else { Start-Process $pathFile -Wait -Verb RunAs }
+} Finally {
+    Remove-Item -LiteralPath $downloadFile -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $pathFile -Force -ErrorAction SilentlyContinue
 }
-
-# Defender exclusions to allow .exe to run
-Add-MpPreference -ExclusionPath "$env:TEMP\Quest Software"
-Add-MpPreference -ControlledFolderAccessAllowedApplications $pathFile
-
-Invoke-WebRequest -Uri $downloadUri -Out $pathFile #$pathZip
-    Write-Output "Variable Summary: `nOwner: [$owner] `nRepo Name: [$repoName] `nFilename Pattern: [$filenamePattern] `nPath Extract: [$pathExtract] `nInner Directory [$innerDirectory]"
-
-# Start .exe and run prerequisites if choco is not detected
-$TARGETDIR = 'C:\ProgramData\Chocolatey\choco.exe'
-    If (!( Test-Path -Path $TARGETDIR )) {
-        Start-Process $pathFile -Wait -Verb Runas
-    }
-
-# Remove prerequisite log
-$winTemp = [System.Environment]::GetEnvironmentVariable('TEMP','Machine')
-$fileContent = Get-ChildItem $winTemp | Where-Object { $_.Name -like "New Computer Install*" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1 
-    If ( $fileContent.Length -lt '5000' ) { Remove-Item $fileContent.FullName -Force }
-
-Start-Process $pathFile -Wait -Verb Runas 
-
-Remove-Item $pathFile -Force
-
-# Remove Defender exclusions to allow .exe to run
-Remove-MpPreference -ExclusionPath "$env:TEMP\Quest Software"
-Remove-MpPreference -ControlledFolderAccessAllowedApplications $pathFile

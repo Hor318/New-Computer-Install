@@ -3,6 +3,74 @@ _____________________
 ### Newly added features will be updated here. I have added the old versions to the best of my ability.
 
 ------------------------------------------------------------------
+##### Version: 2.0.0
+    - Branded the project as Aar318's New Computer Install with a new GUI, taskbar, and EXE icon
+    - Added a selectable dark/light GUI with 60 individual setup, privacy, diagnostics, and repair options with contextual customization panels
+    - Added Full (default), Minimal, and Custom presets shared by the GUI and CLI
+    - Added one automatic pre-change System Restore point attempt per day for safe repeat runs
+    - Added opt-in DISM/SFC, Windows Update, network-stack, and WinGet repairs
+    - Made WinGet the primary software installer while retaining Chocolatey as a fallback
+    - Added an embedded CIM-based hardware/health summary with customizable HTML and JSON export
+    - Added privacy defaults for advertising ID, activity upload, tailored experiences, peer update sharing, and location access
+    - Added Dynamic/DHCP DNS as the default with Cloudflare, Quad9, Google, and AdGuard options
+    - Added refreshable applied-state detection to the GUI and `-ListActions`
+    - Changed GUI state detection to live three-second updates with green, red, and orange status indicators
+    - Added a dedicated Repairs view with individual Run buttons, Run All, and Back to Setup navigation
+    - Kept the GUI open while elevated work runs so live states and report results can update afterward
+    - Fixed the hardware-summary volume expression and left the summary blank until the report is run
+    - Clarified Java as Eclipse Temurin OpenJDK and expanded descriptions for less-obvious Windows settings
+    - Rendered the existing project artwork from its high-resolution PNG and added a 64-pixel embedded-EXE fallback
+    - Added a standalone Run Hardware Report Now button directly below the embedded diagnostics summary
+    - Added a branded, fully embedded HTML report viewer with Ko-fi, Donate, and green version attribution
+    - Added a modern Run Now button to every individual setup option and automatic state updates afterward
+    - Moved option descriptions below a dedicated title row so long names and descriptions remain readable
+    - Removed the redundant manual state refresh button now that state monitoring is live
+    - Restored wttr.in's detailed, colored current-day forecast with automatic ANSI-safe fallback
+    - Cached completed weather results in the GUI details pane and removed the GUI-launched console pause
+    - Deferred and batched live-state checks so the GUI paints immediately and remains responsive on slower PCs
+    - Loaded hardware summaries from the saved JSON report instead of repeating the CIM inventory
+    - Changed report names to one file per computer per day and retained only the latest three daily report pairs
+    - Localized the generated timestamp shown in the HTML report
+    - Added editable Windows Update active-hour fields with the existing 20:00-05:00 defaults when blank
+    - Added an opt-in Windows AI action, excluded from Full and Minimal, with reversible Copilot/Recall/Edge/Notepad policies and optional Copilot Appx removal
+    - Kept risky TrustedInstaller, CBS, Defender, system-file, and scheduled-task removal out of routine business provisioning
+    - Added a requireAdministrator manifest to the compiled EXE and visible validation/module/compile stages to the build batch
+    - Ignored the generated New Computer Install EXE in Git/GitHub Desktop
+    - Preserved the original full console run when launched without switches
+    - Added automatic temporary settings backups plus individual restore, import, and export
+    - Added manual prerequisite install and removal controls
+    - Added Ko-fi and Donate buttons
+    - Added editable, prefilled OEM support information
+    - Removed the unused legacy Dependencies folder from v2.0.0 and retained it in the v1.5.1 archive
+    - Made the editable OEM logo optional instead of bundling obsolete artwork
+    - Added selectable prerequisite and common-software components
+    - Added registered McAfee / WebAdvisor and provisioned package removal
+    - Replaced broad Appx removal with a conservative target list to avoid deleting unknown Windows components
+    - Fixed compiled prerequisite runs by explicitly loading or bootstrapping PackageManagement and PowerShellGet
+    - Changed long-running save progress to concise single-line status messages
+    - Changed the GUI launcher to download the current GitHub release and pass the GUI switch through the downloader
+    - Allowed the release downloader to recognize EXE asset names that use spaces, periods, or version text
+    - Fixed GUI launcher visibility while preserving the original project icon in the window, taskbar, and EXE
+    - Added a separate local-only GUI launcher for offline development and testing
+    - Fixed the GUI options and customization panels being hidden by an invalid initial splitter size
+    - Fixed the enlarged header icon rendering as corrupted pixels and made the version/byline green
+    - Fixed the local source fallback being hidden with its PowerShell window
+    - Made dark/light theme switching immediate by avoiding automatic resizing and repeated DataGridView repaint work
+    - Added an editable computer-name field plus matching `-ComputerName` and `-ListActions` CLI options
+    - Replaced obscure Sophia-facing text and removed its duplicate Start-suggestions action
+    - Replaced malformed custom cleanup tasks with supported Storage Sense policy and Windows component cleanup
+    - Added Win32 long-path and visible file-extension quality-of-life options
+    - Added per-run completed/failed action summaries and terminating error capture per action
+    - Replaced legacy command patterns with explicit CIM, registry, COM, sleep, and downloaded-installer handling
+    - Replaced full IPv6 disablement with Microsoft's recommended IPv4 preference, kept SmartScreen enabled, and made Balanced/High Performance selectable
+    - Added supported Chrome and Adobe default-app provisioning for every new Windows profile
+    - Added machine-wide AdGuard deployment for Chrome and Edge
+    - Renamed the Windows 11 context-menu option to the clearer classic Windows 10 context menu
+    - Added one-click GUI launcher and EXE build scripts
+    - Kept timestamped console transcripts while improving error visibility
+    - Fixed elevation argument forwarding, duplicate device scans, repeated Chrome fallback installs, and unnecessary Windows Update delays
+    - Replaced obsolete device rescanning and insecure HTTP endpoints
+------------------------------------------------------------------
 ##### Version: 1.4.6
     - Removed weather widget on windows 11 PC's
 ------------------------------------------------------------------

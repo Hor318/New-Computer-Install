@@ -1,0 +1,37 @@
+{
+  "PrerequisiteItems": [
+    "WinGet",
+    "Chocolatey",
+    "PowerShell",
+    "NuGet",
+    "PowerShellGet",
+    "PSWindowsUpdate"
+  ],
+  "SoftwarePackages": [
+    "7zip",
+    "googlechrome",
+    "temurin",
+    "microsoft-edge",
+    "adobereader"
+  ],
+  "InstallGpuDrivers": true,
+  "OEMManufacturer": "Omnis Computers",
+  "OEMSupportPhone": "(518) 372-7829",
+  "OEMSupportURL": "https://www.omniscomputers.com",
+  "OEMLogo": "",
+  "ComputerName": "",
+  "PowerPlan": "HighPerformance",
+  "TimeZone": "Eastern",
+  "SetChromeDefault": true,
+  "SetAdobePdfDefault": true,
+  "InstallAdGuardChrome": true,
+  "InstallAdGuardEdge": true,
+  "DnsProvider": "Dynamic",
+  "ReportOutputPath": "C:\\Omnis",
+  "UpdateActiveHoursStart": "",
+  "UpdateActiveHoursEnd": "",
+  "DisableWindowsAIPolicies": true,
+  "DisableEdgeAIPolicies": true,
+  "DisableNotepadAI": true,
+  "RemoveCopilotPackages": false
+}
