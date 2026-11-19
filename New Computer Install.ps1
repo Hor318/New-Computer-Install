@@ -1,10 +1,11 @@
 ﻿<#===============================================================================================================================
-|Version: 2.0.0                                                                                                                |
+|Version: 2.0.1                                                                                                                |
 |By Aaron Horan                                                                                                                  |
 |Created 04.14.2020                                                                                                              |
-|Update 10.07.2026                                                                                                               |
+|Update 11.19.2026                                                                                                               |
 ================================================================================================================================#>
 
+#Requires -Version 5.0
 [CmdletBinding()]
 Param (
     [switch]$Gui,
@@ -19,11 +20,12 @@ Param (
     [switch]$NoReboot,
     [switch]$PauseOnExit,
     [switch]$ListActions,
-    [switch]$SelfTest
+    [switch]$SelfTest,
+    [string]$DriverSource
 )
 
 $script:AppName = "Aar318's New Computer Install"
-$script:AppVersion = '2.0.0'
+$script:AppVersion = '2.0.1'
 $script:KoFiUrl = 'https://ko-fi.com/M4M81VBQPJ'
 $script:DonateUrl = 'https://streamelements.com/hor318/tip'
 $script:BackupRoot = Join-Path $env:TEMP 'New Computer Install\Backups'
@@ -48,6 +50,7 @@ Function Get-DefaultRunOptions {
         PrerequisiteItems = @('WinGet','Chocolatey','PowerShell','NuGet','PowerShellGet','PSWindowsUpdate')
         SoftwarePackages = @('7zip','googlechrome','temurin','microsoft-edge','adobereader')
         InstallGpuDrivers = $true
+        DriverSource = ''
         OEMManufacturer = $oem.OEMManufacturer
         OEMSupportPhone = $oem.OEMSupportPhone
         OEMSupportURL = $oem.OEMSupportURL
@@ -85,6 +88,7 @@ Function Import-RunOptions {
 
 $script:RunOptions = Import-RunOptions -Path $SettingsFile
 If ($PSBoundParameters.ContainsKey('ComputerName')) { $script:RunOptions.ComputerName = $ComputerName }
+If ($DriverSource) { $script:RunOptions.DriverSource = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DriverSource) }
 
 $myExe = $script:AppName
 
@@ -98,9 +102,9 @@ Function Start-ElevatedSelf {
     If ($isPowerShellHost) {
         If (!(Test-Path -LiteralPath $PSCommandPath)) { Throw 'Unable to locate the running script.' }
         $quotedScript = '"' + $PSCommandPath + '"'
-        Return (Start-Process -FilePath $processPath -ArgumentList "-NoProfile -ExecutionPolicy Bypass -STA -File $quotedScript $($quotedArguments -join ' ')" -Verb RunAs -PassThru)
+        Return (Start-Process -FilePath $processPath -ArgumentList "-NoProfile -ExecutionPolicy Bypass -STA -File $quotedScript $($quotedArguments -join ' ')" -Verb RunAs -PassThru -ErrorAction Stop)
     } Else {
-        Return (Start-Process -FilePath $processPath -ArgumentList ($quotedArguments -join ' ') -Verb RunAs -PassThru)
+        Return (Start-Process -FilePath $processPath -ArgumentList ($quotedArguments -join ' ') -Verb RunAs -PassThru -ErrorAction Stop)
     }
 }
 
@@ -158,38 +162,99 @@ Function timeStamp {
     Return "{0:MM/dd/yy} {0:HH:mm:ss}" -f ( Get-Date )
 } # End timeStamp Function
 
+Function Initialize-RegistryKey {
+    Param ([string[]]$Path)
+    ForEach ($key in $Path) {
+        If (!(Test-Path -LiteralPath $key)) { New-Item -Path $key -Force | Out-Null }
+    }
+}
+
+Function Enable-PrerequisiteModuleLoading {
+    If ((Get-ExecutionPolicy) -ne 'Restricted') { Return }
+    If ((Get-ExecutionPolicy -Scope MachinePolicy) -ne 'Undefined' -or (Get-ExecutionPolicy -Scope UserPolicy) -ne 'Undefined') {
+        Throw 'Windows PowerShell Group Policy blocks script modules. PackageManagement and PSWindowsUpdate require a policy that permits their modules to load.'
+    }
+    $script:OriginalProcessExecutionPolicy = Get-ExecutionPolicy -Scope Process
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned -Force -ErrorAction Stop
+}
+
 Function Import-PrerequisiteModule {
-    Param ([ValidateSet('PackageManagement','PowerShellGet')][string]$Name,[string]$Version)
+    Param ([ValidateSet('PackageManagement','PowerShellGet')][string]$Name,[version]$Version)
 
     $moduleBase = Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'
     If ($moduleBase -notin ($env:PSModulePath -split ';')) { $env:PSModulePath = "$moduleBase;$env:PSModulePath" }
-    $module = Get-Module -ListAvailable -Name $Name | Sort-Object Version -Descending | Select-Object -First 1
+    $module = Get-Module -ListAvailable -Name $Name | Where-Object Version -GE $Version | Sort-Object Version -Descending | Select-Object -First 1
     If (!$module) {
         $moduleRoot = Join-Path $moduleBase "$Name\$Version"
         $downloadRoot = Join-Path $env:TEMP ("New Computer Install\Module Bootstrap\{0}" -f [guid]::NewGuid().ToString('N'))
         $archive = Join-Path $downloadRoot "$Name.zip"
         $expanded = Join-Path $downloadRoot 'Expanded'
-        Write-Host "[$(timeStamp)] [$Name] is missing. Bootstrapping version [$Version] from PowerShell Gallery.." -ForegroundColor Cyan
+        Write-Host "[$(timeStamp)] Installing [$Name $Version] from PowerShell Gallery." -ForegroundColor Cyan
         Try {
             New-Item -ItemType Directory -Path $expanded -Force | Out-Null
-            Invoke-WebRequest -Uri "https://www.powershellgallery.com/api/v2/package/$Name/$Version" -OutFile $archive -UseBasicParsing -ErrorAction Stop
+            Invoke-WebRequest -Uri "https://www.powershellgallery.com/api/v2/package/$Name/$Version" -OutFile $archive -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
             Expand-Archive -LiteralPath $archive -DestinationPath $expanded -Force
             New-Item -ItemType Directory -Path $moduleRoot -Force | Out-Null
             Copy-Item -Path (Join-Path $expanded '*') -Destination $moduleRoot -Recurse -Force
         } Finally {
             Remove-Item -LiteralPath $downloadRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
-        $module = Get-Module -ListAvailable -Name $Name | Sort-Object Version -Descending | Select-Object -First 1
+        Import-Module (Join-Path $moduleRoot "$Name.psd1") -Global -ErrorAction Stop
+    } Else {
+        Import-Module $module.Path -Global -ErrorAction Stop
     }
-    If (!$module) { Throw "[$Name] could not be located or bootstrapped." }
-    Import-Module $module.Path -Force -ErrorAction Stop
+}
+
+Function Initialize-PowerShellGallery {
+    If ($script:PowerShellGalleryReady) { Return }
+    Enable-PrerequisiteModuleLoading
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    Import-PrerequisiteModule -Name PackageManagement -Version '1.4.8.1'
+    Import-PrerequisiteModule -Name PowerShellGet -Version '2.2.5'
+    If (!(Get-PackageProvider -Name NuGet -ListAvailable -ErrorAction SilentlyContinue | Where-Object Version -GE ([version]'2.8.5.201'))) {
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope AllUsers -Force -Confirm:$false -ErrorAction Stop | Out-Null
+    }
+    $script:PowerShellGalleryReady = $true
+}
+
+Function Update-GalleryModule {
+    Param ([ValidateSet('PowerShellGet','PSWindowsUpdate')][string]$Name,[switch]$Repair)
+
+    $installed = Get-Module -ListAvailable -Name $Name | Sort-Object Version -Descending | Select-Object -First 1
+    Try {
+        Initialize-PowerShellGallery
+        $latest = Find-Module -Name $Name -Repository PSGallery -ErrorAction Stop
+        If ($Repair -or !$installed -or [version]$latest.Version -gt $installed.Version) {
+            Write-Host "[$(timeStamp)] Installing [$Name $($latest.Version)] from PowerShell Gallery." -ForegroundColor Cyan
+            Install-Module -Name $Name -RequiredVersion $latest.Version -Repository PSGallery -Scope AllUsers -Force -Confirm:$false -AllowClobber -ErrorAction Stop | Out-Null
+        }
+    } Catch {
+        If ($Repair -or !$installed) { Throw }
+        Write-Warning "[$(timeStamp)] Could not check or update [$Name]. Trying the installed version [$($installed.Version)]. $($_.Exception.Message.Trim())"
+    }
+}
+
+Function Initialize-PSWindowsUpdate {
+    If ($script:PSWindowsUpdateReady) { Return }
+    Enable-PrerequisiteModuleLoading
+    For ($attempt = 0; $attempt -lt 2; $attempt++) {
+        Update-GalleryModule -Name PSWindowsUpdate -Repair:($attempt -eq 1)
+        Try {
+            $module = Import-Module PSWindowsUpdate -Global -PassThru -Force:($attempt -eq 1) -ErrorAction Stop
+            If (!$module.ExportedCommands.ContainsKey('Get-WindowsUpdate')) { Throw 'PSWindowsUpdate did not export Get-WindowsUpdate.' }
+            $script:PSWindowsUpdateReady = $true
+            Write-Host "[$(timeStamp)] PSWindowsUpdate $($module.Version) is ready." -ForegroundColor Gray
+            Return
+        } Catch [System.Management.Automation.PSSecurityException] {
+            Throw
+        } Catch {
+            If ($attempt -eq 1) { Throw }
+            Write-Warning "[$(timeStamp)] Repairing PSWindowsUpdate after a load failure. $($_.Exception.Message.Trim())"
+        }
+    }
 }
 
 Function Initialize-Session {
-    $script:ErrorActionPreferenceBeforeRun = $ErrorActionPreference
-    $script:ProgressPreferenceBeforeRun = $ProgressPreference
-    $ErrorActionPreference = 'Continue'
-    $ProgressPreference = 'SilentlyContinue'
     $script:StopWatch = [Diagnostics.Stopwatch]::StartNew()
     $script:Log = Join-Path $env:WINDIR ("Temp\{0}-{1}.log" -f $script:AppName,(Get-Date -Format 'yyyy-MM-dd_HH.mm.ss'))
     $script:TargetLogs = Join-Path $env:WINDIR "Temp\$($script:AppName)*.log"
@@ -207,7 +272,8 @@ Function Initialize-Session {
         Sort-Object LastWriteTime -Descending |
         Select-Object -Skip 3 |
         Remove-Item -Force -ErrorAction SilentlyContinue
-    Start-Transcript -Path $script:Log -Force | Out-Null
+    Try { Start-Transcript -Path $script:Log -Force -ErrorAction Stop | Out-Null }
+    Catch { Write-Warning "[$(timeStamp)] The session log could not be opened: $($_.Exception.Message)" }
     Write-Host ''
     Write-Host "  $($script:AppName)" -ForegroundColor Cyan
     Write-Host "  Ko-fi: $($script:KoFiUrl)  |  Donate: $($script:DonateUrl)  |  " -ForegroundColor Gray -NoNewline
@@ -226,95 +292,78 @@ Function PreRequisites {
     $allowed = @('WinGet','Chocolatey','PowerShell','NuGet','PowerShellGet','PSWindowsUpdate')
     $Items = @($Items | Where-Object { $_ -in $allowed } | Select-Object -Unique)
 
-    If ($Items -contains 'WinGet') {
-        If (!(Get-Command winget.exe -ErrorAction SilentlyContinue)) {
-            $desktopInstaller = Get-AppxPackage -AllUsers -Name Microsoft.DesktopAppInstaller -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
-            If ($desktopInstaller -and (Test-Path -LiteralPath (Join-Path $desktopInstaller.InstallLocation 'AppxManifest.xml'))) {
-                Write-Host "[$(timeStamp)] Re-registering the installed App Installer package.." -ForegroundColor Cyan
-                Add-AppxPackage -DisableDevelopmentMode -Register (Join-Path $desktopInstaller.InstallLocation 'AppxManifest.xml') -ErrorAction Stop
+    $failed = [Collections.Generic.List[string]]::new()
+    Try {
+        If ($Items -contains 'WinGet') {
+            If (!(Get-Command winget.exe -ErrorAction SilentlyContinue)) {
+                $desktopInstaller = Get-AppxPackage -AllUsers -Name Microsoft.DesktopAppInstaller -ErrorAction SilentlyContinue | Sort-Object Version -Descending | Select-Object -First 1
+                If ($desktopInstaller -and (Test-Path -LiteralPath (Join-Path $desktopInstaller.InstallLocation 'AppxManifest.xml'))) {
+                    Write-Host "[$(timeStamp)] Re-registering the installed App Installer package.." -ForegroundColor Cyan
+                    Add-AppxPackage -DisableDevelopmentMode -Register (Join-Path $desktopInstaller.InstallLocation 'AppxManifest.xml') -ErrorAction Stop
+                }
+            }
+            If (Get-Command winget.exe -ErrorAction SilentlyContinue) {
+                Write-Host "[$(timeStamp)] WinGet version: $(& winget.exe --version)" -ForegroundColor Gray
+            } Else {
+                Write-Warning "[$(timeStamp)] WinGet is unavailable. Software installs will use Chocolatey when possible. Install or update 'App Installer' from Microsoft Store to restore WinGet."
             }
         }
-        If (Get-Command winget.exe -ErrorAction SilentlyContinue) {
-            Write-Host "[$(timeStamp)] WinGet version: $(& winget.exe --version)" -ForegroundColor Gray
-        } Else {
-            Write-Warning "[$(timeStamp)] WinGet is unavailable. Software installs will use Chocolatey when possible. Install or update 'App Installer' from Microsoft Store to restore WinGet."
-        }
+    } Catch {
+        $failed.Add('WinGet')
+        Write-Warning "[$(timeStamp)] WinGet setup failed: $($_.Exception.Message)"
     }
 
-    $TARGETDIR = 'C:\ProgramData\Chocolatey\choco.exe'
-    If (($Items -contains 'Chocolatey') -and !( Test-Path -Path $TARGETDIR )) {
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-        $installerPath = Join-Path $env:TEMP ("Install-Chocolatey-{0}.ps1" -f [guid]::NewGuid().ToString('N'))
-        Write-Host "[$(timeStamp)] Downloading the official Chocolatey installer." -ForegroundColor Cyan
-        Try {
-            Invoke-WebRequest -Uri 'https://community.chocolatey.org/install.ps1' -OutFile $installerPath -UseBasicParsing -ErrorAction Stop
-            $installProcess = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$installerPath`"" -Wait -PassThru
-            If ($installProcess.ExitCode -ne 0) { Throw "Chocolatey installer returned exit code [$($installProcess.ExitCode)]." }
-        } Finally {
-            Remove-Item -LiteralPath $installerPath -Force -ErrorAction SilentlyContinue
-        }
-
-        # Refresh environment variables in the current session so choco is immediately
-        # available in PATH — no relaunch needed
-        $env:ChocolateyInstall = "$env:ProgramData\chocolatey"
-        $env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')
-        Write-Host "[$(timeStamp)] Chocolatey installed and environment refreshed. Continuing script." -ForegroundColor Cyan
-    }
-
-    If ($Items -contains 'Chocolatey') { Write-Host "[$(timeStamp)] Chocolatey is installed. Continuing script." -ForegroundColor Gray }
-
-    $MyPowershell = $PSVersionTable.PSVersion
-    If (($Items -contains 'PowerShell') -and $MyPowershell -lt [Version]"5.0" ) {
-        Write-Host "[$(timeStamp)] You are on version $MyPowershell. Attempting to upgrade now." -ForegroundColor Yellow
-            cmd /c "choco upgrade -y powershell --force" | ForEach-Object { "[$(timeStamp)] $_" }
-                $null = Start-ElevatedSelf -ArgumentList @()
-                Exit
-    }
-    If ($Items -contains 'PowerShell') { Write-Host "[$(timeStamp)] PowerShell version: $MyPowershell" -ForegroundColor Gray }
-
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    If ($Items -contains 'NuGet' -or $Items -contains 'PowerShellGet' -or $Items -contains 'PSWindowsUpdate') {
-        Import-PrerequisiteModule -Name PackageManagement -Version '1.4.8.1'
-        Import-PrerequisiteModule -Name PowerShellGet -Version '2.2.5'
-    }
-    If ($Items -contains 'NuGet') {
-        If (!(Get-PackageProvider -Name NuGet -ListAvailable -ErrorAction SilentlyContinue)) {
-            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Confirm:$false -Force -ErrorAction Stop | Out-Null
-        }
-        Write-Host "[$(timeStamp)] NuGet package provider is ready." -ForegroundColor Gray
-    }
-
-    If ($Items -contains 'PowerShellGet') {
-        Write-Host "[$(timeStamp)] Updating PowerShellGet.." -ForegroundColor Gray
-        Try {
-            Install-Module -Name PowerShellGet -Force -AllowClobber -SkipPublisherCheck -Scope AllUsers -ErrorAction Stop | Out-Null
-            Import-Module PowerShellGet -Force -ErrorAction SilentlyContinue
-            Write-Host "[$(timeStamp)] PowerShellGet updated and loaded." -ForegroundColor Gray
-        } Catch {
-            Write-Warning "[$(timeStamp)] PowerShellGet update failed — continuing with existing version. Error: [$($_.Exception.Message)]"
-        }
-    }
-
-    $instModules = If ($Items -contains 'PSWindowsUpdate') { @('PSWindowsUpdate') } Else { @() }
-    ForEach ( $module in $instModules ) {
-        If ( $moduleInfo = Get-Module -ListAvailable -Name $module | Sort-Object Version -Descending | Select-Object -First 1 ) {
-            Write-Host "[$(timeStamp)] Module [$module ($($moduleInfo.Version))] already installed." -ForegroundColor Gray
+    Try {
+        $TARGETDIR = Join-Path $env:ProgramData 'chocolatey\bin\choco.exe'
+        If (($Items -contains 'Chocolatey') -and !(Get-Command choco.exe -ErrorAction SilentlyContinue) -and !(Test-Path -LiteralPath $TARGETDIR)) {
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+            $installerPath = Join-Path $env:TEMP ("Install-Chocolatey-{0}.ps1" -f [guid]::NewGuid().ToString('N'))
+            Write-Host "[$(timeStamp)] Downloading the official Chocolatey installer." -ForegroundColor Cyan
             Try {
-                Install-Module -Name $module -Force -AllowClobber -SkipPublisherCheck -Scope AllUsers -ErrorAction Stop | Out-Null
-                Write-Host "[$(timeStamp)]   [$module] updated." -ForegroundColor Gray
-            } Catch {
-                Write-Warning "[$(timeStamp)] Error updating [$module]: [$($_.Exception.Message)]"
+                Invoke-WebRequest -Uri 'https://community.chocolatey.org/install.ps1' -OutFile $installerPath -UseBasicParsing -ErrorAction Stop
+                $installProcess = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$installerPath`"" -Wait -PassThru -ErrorAction Stop
+                If ($installProcess.ExitCode -ne 0) { Throw "Chocolatey installer returned exit code [$($installProcess.ExitCode)]." }
+            } Finally {
+                Remove-Item -LiteralPath $installerPath -Force -ErrorAction SilentlyContinue
             }
-        } Else {
-            Write-Host "[$(timeStamp)] Module [$module] not found. Installing now.." -ForegroundColor Cyan
-            Install-Module $module -Confirm:$false -Force -AllowClobber -SkipPublisherCheck -Scope AllUsers
-        }
-    } # End ForEach
 
-    If ($Items -contains 'PowerShellGet' -or $Items -contains 'PSWindowsUpdate') {
-        Import-Module PowerShellGet -Force -ErrorAction SilentlyContinue
+            # Refresh environment variables in the current session so choco is immediately
+            # available in PATH — no relaunch needed
+            $env:ChocolateyInstall = "$env:ProgramData\chocolatey"
+            $env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')
+        }
+
+        If ($Items -contains 'Chocolatey') {
+            If (!(Get-Command choco.exe -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $TARGETDIR)) {
+                $env:Path = "$(Split-Path -Parent $TARGETDIR);$env:Path"
+            }
+            If (!(Get-Command choco.exe -ErrorAction SilentlyContinue)) { Throw 'choco.exe is unavailable after Chocolatey setup.' }
+            Write-Host "[$(timeStamp)] Chocolatey is installed. Continuing script." -ForegroundColor Gray
+        }
+    } Catch {
+        $failed.Add('Chocolatey')
+        Write-Warning "[$(timeStamp)] Chocolatey setup failed: $($_.Exception.Message)"
+    }
+    If ($Items -contains 'PowerShell') { Write-Host "[$(timeStamp)] PowerShell version: $($PSVersionTable.PSVersion)" -ForegroundColor Gray }
+
+    If ('NuGet' -in $Items -or 'PowerShellGet' -in $Items) {
+        Try {
+            Initialize-PowerShellGallery
+            If ('PowerShellGet' -in $Items) {
+                Update-GalleryModule -Name PowerShellGet
+                Import-PrerequisiteModule -Name PowerShellGet -Version '2.2.5'
+            }
+            Write-Host "[$(timeStamp)] PowerShellGet and NuGet are ready." -ForegroundColor Gray
+        } Catch {
+            $failed.Add("PowerShell Gallery: $($_.Exception.Message.Trim())")
+        }
+    }
+    If ('PSWindowsUpdate' -in $Items) {
+        Try { Initialize-PSWindowsUpdate }
+        Catch { $failed.Add("PSWindowsUpdate: $($_.Exception.Message.Trim())") }
     }
 
+    If ($failed.Count) { Throw "Prerequisite setup failed for: $($failed -join ', ')." }
 } # End PreRequisites function
 
 Function Uninstall-Prerequisites {
@@ -343,6 +392,7 @@ Function Uninstall-Prerequisites {
     }
 
     If ($Items -contains 'PSWindowsUpdate') {
+        Enable-PrerequisiteModuleLoading
         Get-Module -ListAvailable PSWindowsUpdate | ForEach-Object {
             Try { Uninstall-Module PSWindowsUpdate -RequiredVersion $_.Version -Force -ErrorAction Stop } Catch {
                 Write-Warning "[$(timeStamp)] Could not remove PSWindowsUpdate $($_.Version): $($_.Exception.Message)"
@@ -419,7 +469,8 @@ Function myWeather {
         $cachePath = [string]$script:RunOptions.WeatherCachePath
         If ($cachePath) {
             New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($cachePath)) -Force | Out-Null
-            @("Updated: $((Get-Date).ToString('G'))",'') + @($currentDay | ForEach-Object { $_ -replace "`e\[[0-?]*[ -/]*[@-~]",'' }) |
+            $ansiPattern = "$([char]27)\[[0-?]*[ -/]*[@-~]"
+            @("Updated: $((Get-Date).ToString('G'))",'') + @($currentDay | ForEach-Object { $_ -replace $ansiPattern,'' }) |
                 Set-Content -LiteralPath $cachePath -Encoding UTF8
         }
     } Catch {
@@ -474,18 +525,28 @@ Function RemoveBloatware {
         'CandyCrush|Disney|Facebook|Instagram|TikTok|Twitter|Spotify'
     )
     $unwantedRegex = $unwantedPatterns -join '|'
-    $installed = @(Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue | Where-Object { $_.Name -match $unwantedRegex })
-    $provisioned = @(Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match $unwantedRegex })
+    $failed = [Collections.Generic.List[string]]::new()
+    $installed = @(Get-AppxPackage -AllUsers -ErrorAction Stop | Where-Object { $_.Name -match $unwantedRegex })
 
     ForEach ($app in $installed) {
         Write-Host "[$(timeStamp)] Removing installed app [$($app.Name)]." -ForegroundColor Gray
-        Remove-AppxPackage -Package $app.PackageFullName -AllUsers -ErrorAction Continue
+        Try { Remove-AppxPackage -Package $app.PackageFullName -AllUsers -ErrorAction Stop }
+        Catch { $failed.Add("$($app.Name): $($_.Exception.Message.Trim())") }
     }
+    $provisioned = @(Get-AppxProvisionedPackage -Online -ErrorAction Stop | Where-Object { $_.DisplayName -match $unwantedRegex })
     ForEach ($app in $provisioned) {
         Write-Host "[$(timeStamp)] Removing provisioned app [$($app.DisplayName)]." -ForegroundColor Gray
-        Remove-AppxProvisionedPackage -Online -PackageName $app.PackageName -AllUsers -ErrorAction Continue | Out-Null
+        Try { Remove-AppxProvisionedPackage -Online -PackageName $app.PackageName -ErrorAction Stop | Out-Null }
+        Catch {
+            $removeFailure = $_.Exception.Message.Trim()
+            Try {
+                $remaining = Get-AppxProvisionedPackage -Online -ErrorAction Stop | Where-Object PackageName -EQ $app.PackageName
+            } Catch { $remaining = $true }
+            If ($remaining) { $failed.Add("$($app.DisplayName) (provisioned): $removeFailure") }
+        }
     }
     If (!$installed -and !$provisioned) { Write-Host "[$(timeStamp)] No targeted consumer bloatware was found." -ForegroundColor Gray }
+    If ($failed.Count) { Throw ($failed -join ' | ') }
 } # End RemoveBloatware Function
 
 <# =================================================================================================================================
@@ -516,7 +577,7 @@ Function GetComputerName {
 Function to disable the show suggestions in start button     #>
 Function DisableShowSuggestions {
     $path = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
-    New-Item -Path $path -Force | Out-Null
+    Initialize-RegistryKey $path
     New-ItemProperty -Path $path -Name 'SubscribedContent-338388Enabled' -PropertyType DWord -Value 0 -Force | Out-Null
     Write-Host "[$(timeStamp)] Show Suggestions in Start disabled (takes effect after reboot)" -ForegroundColor Gray
 }
@@ -566,14 +627,20 @@ Function ChocoSoftware {
     }
     $allowedPackages = @($packageMap.Keys)
     $Packages = @($Packages | ForEach-Object { ([string]$_).ToLowerInvariant() } | Where-Object { $_ -in $allowedPackages } | Select-Object -Unique)
+    If (!$Packages -and !$IncludeGpuDrivers) { Write-Host "[$(timeStamp)] No software packages selected." -ForegroundColor Gray; Return }
     $hasWinGet = $null -ne (Get-Command winget.exe -ErrorAction SilentlyContinue)
     $hasChocolatey = $null -ne (Get-Command choco.exe -ErrorAction SilentlyContinue)
     If (!$hasWinGet -and !$hasChocolatey) { Throw 'Neither WinGet nor Chocolatey is available. Select the package-manager prerequisites first.' }
 
-    Write-Host "[$(timeStamp)] Detecting GPU for driver selection.." -ForegroundColor Gray
     $updateGPU = ''
+    $failed = [Collections.Generic.List[string]]::new()
     If ($IncludeGpuDrivers) {
-        $getGPU = Get-CimInstance -ClassName Win32_VideoController | Select-Object -ExpandProperty Caption
+        Write-Host "[$(timeStamp)] Detecting GPU for driver selection.." -ForegroundColor Gray
+        Try { $getGPU = Get-CimInstance -ClassName Win32_VideoController -ErrorAction Stop | Select-Object -ExpandProperty Caption }
+        Catch {
+            $failed.Add('GPU detection')
+            Write-Warning "[$(timeStamp)] GPU detection failed: $($_.Exception.Message)"
+        }
             If ( $getGPU -like "*AMD Radeon*" ) {
                 $updateGPU = "amd-ryzen-chipset"
                 $manuGPU = "AMD drivers"
@@ -591,42 +658,50 @@ Function ChocoSoftware {
         Write-Host "[$(timeStamp)] GPU driver packages were not selected." -ForegroundColor Gray
     }
 
-    If (!$Packages -and !$updateGPU) { Write-Host "[$(timeStamp)] No software packages selected." -ForegroundColor Yellow; Return }
     ForEach ($package in $Packages) {
         $installed = $false
         If ($hasWinGet) {
             $wingetId = $packageMap[$package].WinGet
             Write-Host "[$(timeStamp)] WinGet: installing or updating [$wingetId].." -ForegroundColor Cyan
-            & winget.exe install --id $wingetId --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity 2>&1 |
-                Where-Object { $_ -match 'Successfully|installed|upgrade|No available|already' } |
-                ForEach-Object { Write-Host "[$(timeStamp)] $_" -ForegroundColor Gray }
-            $installed = $LASTEXITCODE -eq 0
+            $installExitCode = & {
+                # Windows PowerShell turns redirected native stderr into PowerShell errors.
+                $ErrorActionPreference = 'Continue'
+                & winget.exe install --id $wingetId --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity 2>&1 |
+                    Where-Object { $_ -match 'Successfully|installed|upgrade|No available|already' } |
+                    ForEach-Object { Write-Host "[$(timeStamp)] $_" -ForegroundColor Gray }
+                $LASTEXITCODE
+            }
+            $installed = $installExitCode -eq 0
             If (!$installed) {
-                & winget.exe list --id $wingetId --exact --accept-source-agreements --disable-interactivity 2>$null | Out-Null
-                $installed = $LASTEXITCODE -eq 0
+                $installed = & {
+                    $ErrorActionPreference = 'Continue'
+                    & winget.exe list --id $wingetId --exact --accept-source-agreements --disable-interactivity 2>$null | Out-Null
+                    $LASTEXITCODE -eq 0
+                }
             }
         }
         If (!$installed -and $hasChocolatey) {
             $chocoId = $packageMap[$package].Chocolatey
             Write-Host "[$(timeStamp)] Chocolatey fallback: installing or updating [$chocoId].." -ForegroundColor Yellow
-            & choco.exe upgrade $chocoId -y --limit-output
+            & choco.exe upgrade $chocoId -y --limit-output --no-progress
             $installed = $LASTEXITCODE -in @(0,1641,3010)
         }
-        If (!$installed) { Write-Warning "[$(timeStamp)] Package [$package] could not be installed by an available package manager." }
+        If (!$installed) { $failed.Add($package) }
     }
 
     $gpuPackages = @($updateGPU -split ' ' | Where-Object { $_ })
     If ($gpuPackages) {
         If ($hasChocolatey) {
             Write-Host "[$(timeStamp)] Chocolatey: installing detected GPU tools [$($gpuPackages -join ', ')].." -ForegroundColor Cyan
-            & choco.exe upgrade @gpuPackages -y --limit-output
-            If ($LASTEXITCODE -notin @(0,1641,3010)) { Write-Warning "[$(timeStamp)] GPU package installation returned exit code [$LASTEXITCODE]." }
+            & choco.exe upgrade @gpuPackages -y --limit-output --no-progress
+            If ($LASTEXITCODE -notin @(0,1641,3010)) { $failed.Add("GPU packages (exit $LASTEXITCODE)") }
         } Else {
-            Write-Warning "[$(timeStamp)] Detected GPU tools currently require the Chocolatey fallback; skipping because Chocolatey is unavailable."
+            $failed.Add('GPU packages (Chocolatey is unavailable)')
         }
     }
 
     Write-Host "[$(timeStamp)] Packages attempted: $((@($Packages) + $gpuPackages) -join ', ')" -ForegroundColor Cyan
+    If ($failed.Count) { Throw "Software setup failed for: $($failed -join ', ')." }
 }
 
 Function Remove-McAfeeProducts {
@@ -647,8 +722,7 @@ Function Remove-McAfeeProducts {
 
     $uninstallRoots = @(
         'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
-        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
-        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
     )
     $products = @($uninstallRoots | ForEach-Object { Get-ItemProperty $_ -ErrorAction SilentlyContinue } |
         Where-Object { $_.DisplayName -match 'McAfee|WebAdvisor' } |
@@ -753,13 +827,13 @@ Function Install-AdGuardBrowserPolicies {
 
     If ($Chrome) {
         $chromePolicy = 'HKLM:\SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist'
-        New-Item -Path $chromePolicy -Force | Out-Null
+        Initialize-RegistryKey $chromePolicy
         New-ItemProperty -Path $chromePolicy -Name '318' -PropertyType String -Value 'bgnkhhnnamicmpeenaelnjfhikgbkllg;https://clients2.google.com/service/update2/crx' -Force | Out-Null
         Write-Host "[$(timeStamp)] AdGuard policy configured for every Chrome profile." -ForegroundColor Gray
     }
     If ($Edge) {
         $edgePolicy = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist'
-        New-Item -Path $edgePolicy -Force | Out-Null
+        Initialize-RegistryKey $edgePolicy
         New-ItemProperty -Path $edgePolicy -Name '318' -PropertyType String -Value 'pdffkfellgipmhklpdmokmckkkfcopbh;https://edge.microsoft.com/extensionwebstorebase/v1/crx' -Force | Out-Null
         Write-Host "[$(timeStamp)] AdGuard policy configured for every Edge profile." -ForegroundColor Gray
     }
@@ -767,14 +841,17 @@ Function Install-AdGuardBrowserPolicies {
 
 <# =================================================================================================================================
 Function to install Drivers and Windows Updates     #>
-Function DriverUpdates {
-    InstallMissingDrivers
-} # End DriverUpdates Function
-
 Function WindowUpdatesInstall {
     Write-Host "[$(timeStamp)] Checking for Windows Updates.." -ForegroundColor Cyan
-        Get-WindowsUpdate -MicrosoftUpdate -Install -AcceptAll -IgnoreRebootRequired -Verbose
-        DriverUpdates
+    $failed = @(
+        Try {
+            Initialize-PSWindowsUpdate
+            PSWindowsUpdate\Get-WindowsUpdate -MicrosoftUpdate -Install -AcceptAll -IgnoreReboot -ErrorAction Stop | Out-Host
+        } Catch { "Windows Update: $($_.Exception.Message.Trim())" }
+        Try { $null = InstallMissingDrivers }
+        Catch { "Driver updates: $($_.Exception.Message.Trim())" }
+    )
+    If ($failed) { Throw ($failed -join ' | ') }
     Write-Host "[$(timeStamp)] Windows Update installation pass complete." -ForegroundColor Gray
 }
 
@@ -791,10 +868,10 @@ Function WindowsPhotoViewer {
         Write-Host "[$(timeStamp)] Restoring Windows Photo Viewer.." -ForegroundColor Cyan
 
         If (!( Test-Path -Path Registry::HKEY_CLASSES_ROOT\Applications\photoviewer.dll\shell\open\command )) {
-            New-Item -Path Registry::HKEY_CLASSES_ROOT\Applications\photoviewer.dll\shell\open\command -Force
+            Initialize-RegistryKey 'Registry::HKEY_CLASSES_ROOT\Applications\photoviewer.dll\shell\open\command'
         }
         If (!( Test-Path -Path Registry::HKEY_CLASSES_ROOT\Applications\photoviewer.dll\shell\open\DropTarget )) {
-            New-Item -Path Registry::HKEY_CLASSES_ROOT\Applications\photoviewer.dll\shell\open\DropTarget -Force
+            Initialize-RegistryKey 'Registry::HKEY_CLASSES_ROOT\Applications\photoviewer.dll\shell\open\DropTarget'
         }
 
         New-ItemProperty -Path Registry::HKEY_CLASSES_ROOT\Applications\photoviewer.dll\shell\open -Name MuiVerb -Type String -Value "@photoviewer.dll,-3043" -Force
@@ -856,9 +933,10 @@ Function RebootNow {
 <# =================================================================================================================================
  Get driver health state     #>
 Function GetDriverHealth {
-    $DeviceState = Get-CimInstance -ClassName Win32_PnpEntity -Namespace Root\CIMV2 | Where-Object { $_.ConfigManagerErrorCode -gt 0 }
+    $DeviceState = Get-CimInstance -ClassName Win32_PnpEntity -Namespace Root\CIMV2 -ErrorAction Stop |
+        Where-Object { $_.Present -ne $false -and $_.ConfigManagerErrorCode -gt 0 }
 
-    $script:DevicesInError = ForEach ( $Device In $DeviceState ) {
+    ForEach ( $Device In $DeviceState ) {
         $Errortext = Switch ( $device.ConfigManagerErrorCode ) {
             0   {"This device is working properly."}
             1   {"This device is not configured correctly."}
@@ -892,96 +970,308 @@ Function GetDriverHealth {
             29  {"This device is disabled because the firmware of the device did not give it the required resources."}
             30  {"This device is using an Interrupt Request (IRQ) resource that another device is using."}
             31  {"This device is not working properly because Windows cannot load the drivers required for this device."}
+            43  {"A driver reported that the device failed."}
+            Default {"Windows reports a device problem."}
         } # End $Errortext switch
 
         [PSCustomObject] @{
             ErrorCode   = $device.ConfigManagerErrorCode
             ErrorText   = $Errortext
-            Device      = $device.Caption
-            Description = $device.Description
-            Present     = $device.Present
-            Status      = $device.Status
-            StatusInfo  = $device.StatusInfo
+            Device      = If ($device.Caption) { $device.Caption } Else { $device.DeviceID }
+            InstanceId  = $device.DeviceID
+            HardwareIds = @($device.HardwareID)
+            CompatibleIds = @($device.CompatibleID)
         }
 
-    } # End $DevicesInError ForEach
+    }
 
 } # End GetDriverHealth Function
 
 <# =================================================================================================================================
  Install Missing Drivers     #>
+Function Select-DriverUpdates {
+    Param ([object[]]$Updates,[object[]]$Devices)
+
+    $offers = @{}
+    $rankedUpdates = $Updates | Sort-Object @{Expression={[bool]$_.BrowseOnly}},@{Expression={$_.DriverVerDate};Descending=$true}
+    ForEach ($update in $rankedUpdates) {
+        $ids = @($update.DriverHardwareID) + @($update.WindowsDriverUpdateEntries | ForEach-Object { $_.DriverHardwareID })
+        ForEach ($id in $ids) {
+            If ($id -and !$offers.ContainsKey($id)) { $offers[$id] = $update }
+        }
+    }
+
+    $selected = @{}
+    ForEach ($device in $Devices) {
+        $matchId = @($device.HardwareIds) + @($device.CompatibleIds) |
+            Where-Object { $_ -and $offers.ContainsKey($_) } | Select-Object -First 1
+        If (!$matchId) {
+            Write-Host "[$(timeStamp)] No matching Windows Update driver offered for [$($device.Device)]." -ForegroundColor Yellow
+            Continue
+        }
+        $update = $offers[$matchId]
+        $id = $update.Identity.UpdateID
+        Write-Host "[$(timeStamp)] [$($device.Device)] matched [$($update.Title)] via [$matchId]." -ForegroundColor Gray
+        If (!$selected.ContainsKey($id)) {
+            $selected[$id] = $true
+            $update
+        }
+    }
+}
+
 Function InstallMissingDrivers {
-    Write-Host "[$(timeStamp)] Checking for missing drivers and downloading available options." -ForegroundColor Gray
+    Param ([object[]]$Devices)
 
-    $Session = New-Object -ComObject Microsoft.Update.Session
-    $Searcher = $Session.CreateUpdateSearcher()
-    $Searcher.ServiceID = '7971f918-a847-4430-9279-4a52d1efe18d'
-    $Searcher.SearchScope =  1
-    $Searcher.ServerSelection = 3
-
-    $Criteria = "IsInstalled=0 and Type='Driver' and ISHidden=0"
-        Write-Host "[$(timeStamp)] Searching for missing drivers..." -ForegroundColor Gray
-    $SearchResult = $Searcher.Search( $Criteria )
-    $Updates = $SearchResult.Updates
-
-    If ($Updates.Count -eq 0) {
-        Write-Host "[$(timeStamp)] No missing driver updates were found." -ForegroundColor Gray
-        Return
+    $session = New-Object -ComObject Microsoft.Update.Session
+    $searcher = $session.CreateUpdateSearcher()
+    $criteria = "IsInstalled=0 and Type='Driver' and IsHidden=0"
+    If ($Devices) {
+        Write-Host "[$(timeStamp)] Searching the configured Windows Update source for regular and optional drivers matching problem devices." -ForegroundColor Gray
+        $criteria = "($criteria and BrowseOnly=0) or ($criteria and BrowseOnly=1)"
+    } Else {
+        Write-Host "[$(timeStamp)] Searching the configured Windows Update source for available drivers." -ForegroundColor Gray
+    }
+    $searchResult = $searcher.Search($criteria)
+    If ($searchResult.ResultCode -notin @(2,3)) { Throw "Windows Update driver search returned result $($searchResult.ResultCode)." }
+    If ($searchResult.ResultCode -eq 3) { Write-Warning "[$(timeStamp)] Windows Update returned partial driver search results." }
+    $updates = @($searchResult.Updates | ForEach-Object { $_ })
+    If ($Devices) { $updates = @(Select-DriverUpdates -Updates $updates -Devices $Devices) }
+    If (!$updates.Count) {
+        Write-Host "[$(timeStamp)] No applicable driver packages were selected from Windows Update." -ForegroundColor Gray
+        Return $false
     }
 
-    $Updates | Select-Object Title, DriverModel, DriverVerDate, Driverclass, DriverManufacturer | Format-List
-
-    $UpdatesToDownload = New-Object -ComObject Microsoft.Update.UpdateColl
-    $Updates | ForEach-Object { $UpdatesToDownload.Add( $_ ) | Out-Null }
-        Write-Host "[$(timeStamp)] Downloading drivers..." -ForegroundColor Gray
-    $UpdateSession = New-Object -ComObject Microsoft.Update.Session
-    $Downloader = $UpdateSession.CreateUpdateDownloader()
-    $Downloader.Updates = $UpdatesToDownload
-    $Downloader.Download()
-
-    $UpdatesToInstall = New-Object -ComObject Microsoft.Update.UpdateColl
-    $Updates | ForEach-Object {
-        If ( $_.IsDownloaded ) {
-            $UpdatesToInstall.Add( $_ ) | Out-Null
-        }
+    $failed = [Collections.Generic.List[string]]::new()
+    $toDownload = New-Object -ComObject Microsoft.Update.UpdateColl
+    ForEach ($update in $updates) {
+        Try {
+            If (!$update.EulaAccepted) { $null = $update.AcceptEula() }
+            $null = $toDownload.Add($update)
+        } Catch { $failed.Add("prepare [$($update.Title)]: $($_.Exception.Message.Trim())") }
     }
-        Write-Host "[$(timeStamp)] Installing drivers..." -ForegroundColor Cyan
-    $Installer = $UpdateSession.CreateUpdateInstaller()
-    $Installer.Updates = $UpdatesToInstall
-    $InstallationResult = $Installer.Install()
-        If ( $InstallationResult.RebootRequired ) {
-            Write-Host "[$(timeStamp)] Reboot required after driver install." -ForegroundColor Red
+    If (!$toDownload.Count) { Throw ($failed -join ' | ') }
+    Write-Host "[$(timeStamp)] Downloading $($toDownload.Count) driver package(s)." -ForegroundColor Gray
+    $downloader = $session.CreateUpdateDownloader()
+    $downloader.Updates = $toDownload
+    $downloadResult = $downloader.Download()
+
+    $toInstall = New-Object -ComObject Microsoft.Update.UpdateColl
+    For ($i = 0; $i -lt $toDownload.Count; $i++) {
+        $update = $toDownload.Item($i)
+        If ($update.IsDownloaded) {
+            $null = $toInstall.Add($update)
         } Else {
-            Write-Host "[$(timeStamp)] Driver install complete." -ForegroundColor Gray
+            $status = $downloadResult.GetUpdateResult($i)
+            $failed.Add(("download [{0}]: result {1}, HRESULT 0x{2:X8}" -f $update.Title,$status.ResultCode,$status.HResult))
         }
-
-    Write-Host "[$(timeStamp)] Done checking for drivers." -ForegroundColor Gray
+    }
+    If (!$toInstall.Count) { Throw ($failed -join ' | ') }
+    Write-Host "[$(timeStamp)] Installing $($toInstall.Count) driver package(s)." -ForegroundColor Cyan
+    $installer = $session.CreateUpdateInstaller()
+    $installer.Updates = $toInstall
+    $installationResult = $installer.Install()
+    For ($i = 0; $i -lt $toInstall.Count; $i++) {
+        $title = $toInstall.Item($i).Title
+        $status = $installationResult.GetUpdateResult($i)
+        If ($status.ResultCode -eq 2) {
+            Write-Host "[$(timeStamp)] Installed driver [$title]." -ForegroundColor Gray
+        } Else {
+            $failed.Add(("install [{0}]: result {1}, HRESULT 0x{2:X8}" -f $title,$status.ResultCode,$status.HResult))
+        }
+    }
+    If ($installationResult.RebootRequired) {
+        $script:DriverRebootPending = $true
+        Write-Warning "[$(timeStamp)] A reboot is required to finish driver installation."
+    }
+    If ($failed.Count) { Throw ($failed -join ' | ') }
+    Return [bool]$installationResult.RebootRequired
 } # End InstallMissingDrivers Function
 
-<# =================================================================================================================================
- Address specific error codes     #>
-Function ResolveIssues {
-    Write-Host "[$(timeStamp)] Rescanning devices before running fixes.." -ForegroundColor Gray
-    pnputil.exe /scan-devices | ForEach-Object { "[$(timeStamp)] $_" }
-
-    If (( $script:DevicesInError ).ErrorCode -eq 22 ) {
-        Write-Host "[$(timeStamp)] Re-enabling disabled devices (error code 22).." -ForegroundColor Cyan
-            Start-Sleep -Seconds 1
-            Get-PnpDevice | Where-Object { $_.Problem -eq 22 } | Enable-PnpDevice -Confirm:$false
+Function Test-DriverCatalogAccess {
+    $policyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'
+    $groupPolicy = $null
+    ForEach ($path in @($policyPath,'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Update')) {
+        If (!(Test-Path -LiteralPath $path -ErrorAction Stop)) { Continue }
+        $policy = Get-ItemProperty -LiteralPath $path -ErrorAction Stop
+        If ($path -eq $policyPath) { $groupPolicy = $policy }
+        If ($policy.DoNotConnectToWindowsUpdateInternetLocations -eq 1 -or $policy.DisableWindowsUpdateAccess -eq 1 -or
+            $policy.ExcludeWUDriversInQualityUpdate -eq 1 -or $policy.ExcludeWUDriversFromQualityUpdates -eq 1 -or
+            $policy.SetPolicyDrivenUpdateSourceForDriverUpdates -eq 1 -or
+            ($policy.UpdateServiceUrl -and $policy.SetPolicyDrivenUpdateSourceForDriverUpdates -ne 0)) { Return $false }
     }
+    $auPath = "$policyPath\AU"
+    If (!(Test-Path -LiteralPath $auPath -ErrorAction Stop)) { Return $true }
+    $au = Get-ItemProperty -LiteralPath $auPath -ErrorAction Stop
+    Return ($au.UseWUServer -ne 1 -or ($au.UseUpdateClassPolicySource -eq 1 -and $groupPolicy.SetPolicyDrivenUpdateSourceForDriverUpdates -eq 0))
+}
 
-    If ( @($script:DevicesInError | Where-Object ErrorCode -In @(2,3,4,8,18,21,23,24,28)).Count -gt 0 ) {
-        Write-Host "[$(timeStamp)] Driver reinstall required for one or more devices.." -ForegroundColor Cyan
-        Start-Sleep -Seconds 2
-        InstallMissingDrivers
+Function Test-DriverCatalogProduct {
+    Param ([string]$Products,[string]$Family,[string]$Release)
+
+    ForEach ($product in ($Products -split '(?i)(?=Windows\s+(?:10|11|Server|- Client))')) {
+        If ($product -notlike "$Family*" -and
+            !($Family -ne 'Windows Server' -and ($product -like 'Windows - Client*' -or
+                ($Family -eq 'Windows 11' -and $product -like 'Windows 10*and later*')))) { Continue }
+        If ($Release -match '^\d{2}H[12]$' -and $product -match '\bversion\s+(\d{2}H[12])\b') {
+            $minimum = $Matches[1]
+            If ($minimum -gt $Release -or ($minimum -ne $Release -and $product -notlike '*and later*')) { Continue }
+        }
+        Return $true
     }
+    Return $false
+}
 
-    GetDriverHealth
-} # End ResolveIssues Function
+Function Get-DriverCatalogRows {
+    Param ([string]$Html)
+
+    # shortcut: the Catalog exposes an HTML search page; use its first page until an official driver search API is available.
+    $rowPattern = '(?is)<tr\b[^>]*\bid=["''](?<id>[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})_R\d+["''][^>]*>(?<body>.*?)</tr>'
+    ForEach ($row in [regex]::Matches($Html,$rowPattern)) {
+        $cells = @([regex]::Matches($row.Groups['body'].Value,'(?is)<td\b[^>]*>(.*?)</td>') | ForEach-Object {
+            [Net.WebUtility]::HtmlDecode(($_.Groups[1].Value -replace '<[^>]*>','')).Trim()
+        })
+        If ($cells.Count -lt 6 -or $cells[3] -notmatch '^Drivers\b' -or "$($cells[1]) $($cells[3])" -match '\b(?:Firmware|BIOS|UEFI)\b') { Continue }
+        $version = [version]'0.0'
+        If (![version]::TryParse($cells[5],[ref]$version)) { $version = [version]'0.0' }
+        [pscustomobject]@{ Id=$row.Groups['id'].Value; Title=$cells[1]; Products=$cells[2]; Version=$version }
+    }
+}
+
+Function Get-DriverCatalogDownloads {
+    Param ([string]$Html,[guid]$UpdateId)
+
+    If ($Html -notmatch "(?im)^\s*downloadInformation\[0\]\.updateID\s*=\s*'$UpdateId'\s*;") { Return }
+    $files = [ordered]@{}
+    $fieldPattern = '(?m)^\s*downloadInformation\[0\]\.files\[(?<index>\d+)\]\.(?<key>url|sha256)\s*=\s*''(?<value>[^''\r\n]+)''\s*;'
+    ForEach ($field in [regex]::Matches($Html,$fieldPattern)) {
+        $index = $field.Groups['index'].Value
+        If (!$files.Contains($index)) { $files[$index] = @{} }
+        $files[$index][$field.Groups['key'].Value] = $field.Groups['value'].Value
+    }
+    ForEach ($file in $files.Values) {
+        $uri = $null
+        If (![uri]::TryCreate($file.url,[UriKind]::Absolute,[ref]$uri) -or
+            $uri.Scheme -notin @('https','http') -or !$uri.IsDefaultPort -or $uri.UserInfo -or
+            $uri.Host -notmatch '^(?:[a-z0-9-]+\.)*download\.windowsupdate\.com$' -or
+            $uri.AbsolutePath -notmatch '\.cab$' -or $file.sha256 -notmatch '^[A-Za-z0-9+/]{43}=$') { Continue }
+        $https = [UriBuilder]::new($uri)
+        $https.Scheme = 'https'
+        $https.Port = -1
+        [pscustomobject]@{
+            Uri = $https.Uri
+            Hash = [BitConverter]::ToString([Convert]::FromBase64String($file.sha256)).Replace('-','')
+        }
+    }
+}
+
+Function Install-DriverCatalogDownload {
+    Param ([object]$Download,[string[]]$HardwareIds)
+
+    $folder = Join-Path ([IO.Path]::GetTempPath()) ("NCI-DriverPackage-" + [guid]::NewGuid().ToString('N'))
+    $null = New-Item -ItemType Directory -Path $folder -ErrorAction Stop
+    Try {
+        $archive = Join-Path $folder 'driver.cab'
+        $expanded = Join-Path $folder 'Expanded'
+        Invoke-WebRequest -Uri $Download.Uri -OutFile $archive -UseBasicParsing -MaximumRedirection 0 -TimeoutSec 120 -ErrorAction Stop
+        If ((Get-FileHash -LiteralPath $archive -Algorithm SHA256 -ErrorAction Stop).Hash -ne $Download.Hash) { Throw 'Microsoft Update Catalog SHA-256 mismatch.' }
+        $null = New-Item -ItemType Directory -Path $expanded -ErrorAction Stop
+        & expand.exe $archive '-F:*' $expanded | Out-Null
+        If ($LASTEXITCODE -ne 0) { Throw "CAB extraction exited with code $LASTEXITCODE." }
+
+        ForEach ($inf in Get-ChildItem -LiteralPath $expanded -Filter '*.inf' -File -Recurse -ErrorAction Stop) {
+            $content = Get-Content -LiteralPath $inf.FullName -Raw -ErrorAction Stop
+            If ($content -match '(?im)^\s*Class\s*=\s*"?Firmware\b') { Continue }
+            $matchingIds = @([regex]::Matches($content,'(?m)^[ \t]*[^;\r\n=]+=[^,;\r\n]+,(?<ids>[^;\r\n]+)') | ForEach-Object {
+                $_.Groups['ids'].Value -split ',' | ForEach-Object { $_.Trim().Trim('"') } | Where-Object { $_ -in $HardwareIds }
+            })
+            If (!$matchingIds.Count) { Continue }
+            $signed = $false
+            ForEach ($ref in [regex]::Matches($content,'(?im)^[ \t]*CatalogFile(?:\.[a-z0-9.]+)?\s*=\s*"?(?<name>[a-z0-9_.-]+\.cat)\b')) {
+                $catalogFile = Join-Path $inf.DirectoryName $ref.Groups['name'].Value
+                If (!(Test-Path -LiteralPath $catalogFile -PathType Leaf)) { Continue }
+                $signature = Get-AuthenticodeSignature -LiteralPath $catalogFile
+                If ($signature.Status -eq 'Valid' -and $signature.SignerCertificate.Subject -match '^CN=Microsoft Windows\b') { $signed = $true; Break }
+            }
+            If (!$signed) { Write-Warning "[$(timeStamp)] Skipping [$($inf.Name)]: a valid Microsoft driver catalog signature was unavailable."; Continue }
+            & pnputil.exe /add-driver $inf.FullName /install | Out-Host
+            If ($LASTEXITCODE -eq 3010) { Return $true }
+            If ($LASTEXITCODE -notin @(0,259)) { Write-Warning "[$(timeStamp)] PnPUtil returned exit code $LASTEXITCODE for [$($inf.Name)]." }
+        }
+        Return $false
+    } Finally {
+        Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+Function Invoke-DriverCatalogRepair {
+    Param ([object[]]$Devices)
+
+    If (!$Devices.Count) { Return $false }
+    If (!(Test-DriverCatalogAccess)) {
+        Write-Host "[$(timeStamp)] Managed Windows Update settings restrict the public driver Catalog pass." -ForegroundColor Gray
+        Return $false
+    }
+    $os = Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop
+    $family = If ($os.InstallationType -like 'Server*') { 'Windows Server' }
+        ElseIf ([int]$os.CurrentBuild -ge 22000) { 'Windows 11' } Else { 'Windows 10' }
+    $architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+    If ($architecture -eq 'X64') { $architecture = 'AMD64' }
+    $base = 'https://www.catalog.update.microsoft.com'
+    $headers = @{'Accept-Language'='en-US'}
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $remaining = $Devices
+    ForEach ($device in $Devices) {
+        If ($device.InstanceId -notin $remaining.InstanceId) { Continue }
+        $ids = @($device.HardwareIds | Where-Object { $_ -match '^[a-z0-9]{2,16}\\[a-z0-9_.&{}#:+\-]{2,145}$' } | Select-Object -Unique)
+        If (!$ids.Count) { Continue }
+        Write-Host "[$(timeStamp)] Searching Microsoft Update Catalog for [$($device.Device)]." -ForegroundColor Gray
+        $checked = @{}
+        $testedDownloads = @{}
+        $downloads = 0
+        $queries = @(@($ids[0],$ids[-1]) + $ids | Select-Object -Unique -First 4)
+        :deviceSearch ForEach ($id in $queries) {
+            $query = [uri]::EscapeDataString($id)
+            $page = Invoke-WebRequest -Uri "$base/Search.aspx?q=$query" -Headers $headers -UseBasicParsing -MaximumRedirection 0 -TimeoutSec 15 -ErrorAction Stop
+            $rows = Get-DriverCatalogRows -Html $page.Content | Where-Object {
+                Test-DriverCatalogProduct $_.Products $family $os.DisplayVersion
+            } | Sort-Object Version -Descending
+            ForEach ($row in $rows) {
+                If ($checked.ContainsKey($row.Id)) { Continue }
+                $checked[$row.Id] = $true
+                Try {
+                    $detail = Invoke-WebRequest -Uri "$base/ScopedViewInline.aspx?updateid=$($row.Id)" -Headers $headers -UseBasicParsing -MaximumRedirection 0 -TimeoutSec 15 -ErrorAction Stop
+                    $arch = [regex]::Match($detail.Content,'(?is)\bid="archDiv"[^>]*>.*?</span>\s*([a-z0-9]+)\s*</div>').Groups[1].Value
+                    If ($arch -ne $architecture -or $detail.Content -match '(?is)\bid="ScopedViewHandler_driverClass"[^>]*>\s*Firmware\s*</span>') { Continue }
+                    $hardware = [regex]::Match($detail.Content,'(?is)\bid="driverhwIDs"[^>]*>(.*?)\bid="driverupdateIDs"').Groups[1].Value
+                    $catalogIds = @([regex]::Matches($hardware,'(?is)<div\b[^>]*>\s*([^<>]+?)\s*</div>') | ForEach-Object {
+                        [Net.WebUtility]::HtmlDecode($_.Groups[1].Value).Trim()
+                    })
+                    If (!($ids | Where-Object { $_ -in $catalogIds })) { Continue }
+                    $body = '[{"size":0,"updateID":"' + $row.Id + '","uidInfo":"' + $row.Id + '"}]'
+                    $dialog = Invoke-WebRequest -Uri "$base/DownloadDialog.aspx" -Method Post -Body @{updateIDs=$body} -Headers $headers -UseBasicParsing -MaximumRedirection 0 -TimeoutSec 15 -ErrorAction Stop
+                    ForEach ($download in Get-DriverCatalogDownloads -Html $dialog.Content -UpdateId $row.Id) {
+                        If ($testedDownloads.ContainsKey($download.Hash)) { Continue }
+                        $testedDownloads[$download.Hash] = $true
+                        $downloads++
+                        Write-Host "[$(timeStamp)] Downloading Catalog driver [$($row.Title)] for [$($device.Device)]." -ForegroundColor Cyan
+                        If (Install-DriverCatalogDownload -Download $download -HardwareIds $ids) { Return $true }
+                        $remaining = @(GetDriverHealth)
+                        If ($device.InstanceId -notin $remaining.InstanceId -or $downloads -ge 3) { Break deviceSearch }
+                    }
+                } Catch {
+                    Write-Warning "[$(timeStamp)] Catalog candidate [$($row.Id)] failed: $($_.Exception.Message.Trim())"
+                    If ($downloads -ge 3) { Break deviceSearch }
+                }
+            }
+        }
+    }
+    Return $false
+}
 
 <# =================================================================================================================================
  Remove 'Meet Now'     #>
 Function RemoveMeetNow {
+    Initialize-RegistryKey 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer'
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "HideSCAMeetNow" -Value 1
     Write-Host "[$(timeStamp)] Meet Now disabled." -ForegroundColor Gray
 } # End RemoveMeetNow Function
@@ -990,7 +1280,7 @@ Function RemoveMeetNow {
 Function to select active hours for Windows Updates     #>
 Function SetWindowsUpdateHours ( $startTime,$endTime ) {
     $path = 'HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings'
-    New-Item -Path $path -Force | Out-Null
+    Initialize-RegistryKey $path
     New-ItemProperty -Path $path -Name 'ActiveHoursStart' -PropertyType DWord -Value $startTime -Force | Out-Null
     New-ItemProperty -Path $path -Name 'ActiveHoursEnd' -PropertyType DWord -Value $endTime -Force | Out-Null
     Write-Host ("[{0}] Windows Update active hours: Start [{1:00}:00] End [{2:00}:00]" -f (timeStamp),$startTime,$endTime) -ForegroundColor Gray
@@ -1010,7 +1300,7 @@ Function Resolve-UpdateActiveHour {
  Set auto arrange icons     #>
 Function AutoArrange ( $enable ) {
     $path = 'HKCU:\SOFTWARE\Microsoft\Windows\Shell\Bags\1\Desktop'
-    New-Item -Path $path -Force | Out-Null
+    Initialize-RegistryKey $path
     If ( $enable ) {
         Write-Host "[$(timeStamp)] Auto Arrange: [ON] — Align to grid: [ON]" -ForegroundColor Gray
         New-ItemProperty -Path $path -Name 'FFLAGS' -PropertyType DWord -Value 1075839525 -Force | Out-Null
@@ -1022,7 +1312,12 @@ Function AutoArrange ( $enable ) {
     }
 } # End AutoArrange Function
 
-# Removes News And Interests from the taskbar
+Function Test-NewsAndInterestsPolicy {
+    $os = Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop
+    $build = [int]$os.CurrentBuild
+    Return ($os.InstallationType -eq 'Client' -and $build -ge 19041 -and $build -lt 22000 -and $os.EditionID -notlike 'Core*')
+}
+
 Function NewsAndInterestsTaskbar {
     Param (
         [Parameter(Mandatory = $true,ParameterSetName = "Show")]
@@ -1031,32 +1326,97 @@ Function NewsAndInterestsTaskbar {
         [switch]$Hide
     )
 
-    Switch ( $PSCmdlet.ParameterSetName ) {
-        "Show" {
-            Write-Host "[$(timeStamp)] News and Interests: shown" -ForegroundColor Gray
-                Remove-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Feeds' -Name "EnableFeeds" -Force -ErrorAction SilentlyContinue
-                Remove-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Feeds' -Force -ErrorAction SilentlyContinue
-        }
-        "Hide" {
-            Write-Host "[$(timeStamp)] News and Interests: hidden" -ForegroundColor Gray
-                If (!( Test-Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Feeds' )) {
-                    New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows' -Name 'Windows Feeds' -Force | Out-Null
-                }
-                New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Feeds' -Name "EnableFeeds" -PropertyType DWord -Value 0 -Force | Out-Null
-        }
-    } # End switch
+    If (!(Test-NewsAndInterestsPolicy)) {
+        Write-Host "[$(timeStamp)] Skipping the legacy News and Interests policy on this Windows edition or version." -ForegroundColor Gray
+        Return
+    }
+    $path = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Feeds'
+    If ($Hide) {
+        Initialize-RegistryKey $path
+        New-ItemProperty -LiteralPath $path -Name EnableFeeds -PropertyType DWord -Value 0 -Force -ErrorAction Stop | Out-Null
+        Write-Host "[$(timeStamp)] News and Interests: hidden." -ForegroundColor Gray
+    } Else {
+        $policy = Get-ItemProperty -LiteralPath $path -Name EnableFeeds -ErrorAction SilentlyContinue
+        If ($policy) { Remove-ItemProperty -LiteralPath $path -Name EnableFeeds -Force -ErrorAction Stop }
+        Write-Host "[$(timeStamp)] News and Interests policy cleared." -ForegroundColor Gray
+    }
 } # End NewsAndInterestsTaskbar Function
 
 # Runs functions to get and enable any PnP devices that are not showing up
 Function PnPDevices {
-    GetDriverHealth
-
-    If ( !$script:DevicesInError ) {
+    $devices = @(GetDriverHealth)
+    If (!$devices.Count) {
         Write-Host "[$(timeStamp)] All devices are in a healthy state." -ForegroundColor Gray
-    } Else {
-        Write-Host "[$(timeStamp)] Device errors detected:" -ForegroundColor Yellow
-        Write-Output $script:DevicesInError | Format-Table -AutoSize
-        ResolveIssues
+        Return
+    }
+    Write-Host "[$(timeStamp)] Device errors detected:" -ForegroundColor Yellow
+    $devices | Format-Table ErrorCode,Device,ErrorText -AutoSize | Out-Host
+
+    Write-Host "[$(timeStamp)] Rescanning devices before running fixes." -ForegroundColor Gray
+    & pnputil.exe /scan-devices | Out-Host
+    If ($LASTEXITCODE -ne 0) { Write-Warning "[$(timeStamp)] Device scan exited with code $LASTEXITCODE." }
+    $devices = @(GetDriverHealth)
+
+    $rebootRequired = $false
+    ForEach ($device in $devices) {
+        Try {
+            Switch ($device.ErrorCode) {
+                22 { Enable-PnpDevice -InstanceId $device.InstanceId -Confirm:$false -ErrorAction Stop }
+                43 {
+                    Write-Host "[$(timeStamp)] Restarting device [$($device.Device)] after Code 43." -ForegroundColor Gray
+                    & pnputil.exe /restart-device $device.InstanceId | Out-Host
+                    If ($LASTEXITCODE -eq 3010) { $rebootRequired = $true }
+                    ElseIf ($LASTEXITCODE -ne 0) { Throw "PnPUtil returned exit code $LASTEXITCODE." }
+                }
+            }
+        } Catch { Write-Warning "[$(timeStamp)] Could not reset [$($device.Device)]: $($_.Exception.Message.Trim())" }
+    }
+    $driverFailures = [Collections.Generic.List[string]]::new()
+    $driverProblemCodes = @(1,2,3,4,8,10,18,21,23,24,28,31,43)
+    $targets = @(GetDriverHealth | Where-Object ErrorCode -In $driverProblemCodes)
+    $source = [string]$script:RunOptions.DriverSource
+    If ($source -and $targets.Count -and !$rebootRequired) {
+        Try {
+            $folder = Get-Item -LiteralPath $source -ErrorAction Stop
+            If ($folder -isnot [IO.DirectoryInfo]) { Throw "Driver source [$source] must be a folder of extracted INF packages." }
+            If (!(Get-ChildItem -LiteralPath $folder.FullName -File -Filter '*.inf' -Recurse -ErrorAction Stop | Select-Object -First 1)) {
+                Throw "No INF driver packages were found under [$($folder.FullName)]."
+            }
+            Write-Host "[$(timeStamp)] Checking driver packages in [$($folder.FullName)]." -ForegroundColor Gray
+            & pnputil.exe /add-driver (Join-Path $folder.FullName '*.inf') /subdirs /install | Out-Host
+            If ($LASTEXITCODE -eq 3010) { $rebootRequired = $true }
+            ElseIf ($LASTEXITCODE -notin @(0,259)) { Throw "PnPUtil returned exit code $LASTEXITCODE." }
+        } Catch { $driverFailures.Add("Local driver source: $($_.Exception.Message.Trim())") }
+        $targets = @(GetDriverHealth | Where-Object ErrorCode -In $driverProblemCodes)
+    }
+    If ($targets.Count -and !$rebootRequired) {
+        Try { $rebootRequired = InstallMissingDrivers -Devices $targets }
+        Catch { $driverFailures.Add("Windows Update: $($_.Exception.Message.Trim())") }
+    }
+
+    $remaining = @(GetDriverHealth)
+    $rebootRequired = $rebootRequired -or $script:DriverRebootPending
+    $unresolved = @($remaining | Where-Object ErrorCode -In $driverProblemCodes)
+    If ($unresolved.Count -and !$rebootRequired -and 14 -notin $remaining.ErrorCode) {
+        Try { $rebootRequired = Invoke-DriverCatalogRepair -Devices $unresolved }
+        Catch { $driverFailures.Add("Microsoft Update Catalog: $($_.Exception.Message.Trim())") }
+        $remaining = @(GetDriverHealth)
+    }
+    ForEach ($device in $remaining) {
+        Write-Warning "[$(timeStamp)] [$($device.Device)] still reports Code $($device.ErrorCode). Instance ID: $($device.InstanceId)"
+        Write-Host "  Hardware IDs: $($device.HardwareIds -join ', ')" -ForegroundColor Gray
+        Write-Host "  Compatible IDs: $($device.CompatibleIds -join ', ')" -ForegroundColor Gray
+    }
+    If ($rebootRequired -or 14 -in $remaining.ErrorCode) {
+        Write-Warning "[$(timeStamp)] A reboot is pending. Recheck device status after restarting."
+    }
+    If (@($remaining | Where-Object ErrorCode -NE 14).Count) {
+        $driverFailures.Add('Device problems remain. See hardware IDs and error codes above.')
+        Throw ($driverFailures -join ' | ')
+    }
+    If ($driverFailures.Count) { Write-Warning "[$(timeStamp)] $($driverFailures -join ' | ')" }
+    If (!$remaining.Count) {
+        Write-Host "[$(timeStamp)] No present devices report a problem after repair." -ForegroundColor Green
     }
 } # End PnPDevices Function
 
@@ -1130,8 +1490,9 @@ Function EnableRestorePoints {
 
     If ( $RestorePoints -eq 'Enable' ) {
         Write-Host "[$(timeStamp)] Enabling System Restore on $env:SYSTEMDRIVE.." -ForegroundColor Cyan
-            Enable-ComputerRestore -Drive "$env:SYSTEMDRIVE"
+            Enable-ComputerRestore -Drive "$env:SYSTEMDRIVE\"
             vssadmin Resize ShadowStorage /On=$env:SYSTEMDRIVE /For=$env:SYSTEMDRIVE /MaxSize=10GB
+            If ($LASTEXITCODE -ne 0) { Throw "Could not resize shadow storage (exit code $LASTEXITCODE)." }
     }
 
     If ( $RestorePoints -eq 'Disable' ) {
@@ -1150,12 +1511,14 @@ Function F8BootMenu {
     )
 
     If ( $Toggle -eq 'Enable' ) {
-        bcdedit /set `{current`} BootMenuPolicy Legacy | Out-Null
+         bcdedit /set `{current`} BootMenuPolicy Legacy | Out-Null
+         If ($LASTEXITCODE -ne 0) { Throw "Could not enable the legacy boot menu (exit code $LASTEXITCODE)." }
             Write-Host "[$(timeStamp)] F8 legacy boot menu: enabled" -ForegroundColor Gray
     }
 
     If ( $Toggle -eq 'Disable' ) {
         bcdedit /set `{current`} BootMenuPolicy Standard | Out-Null
+        If ($LASTEXITCODE -ne 0) { Throw "Could not restore the standard boot menu (exit code $LASTEXITCODE)." }
             Write-Host "[$(timeStamp)] F8 legacy boot menu: disabled" -ForegroundColor Gray
     }
 
@@ -1167,6 +1530,7 @@ Function AppSuggestionAndInstallation {
     [ValidateSet( 'Enable','Disable' )][String]$Toggle = 'Disable'
     )
 
+    Initialize-RegistryKey 'HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
     If ( $Toggle -eq 'Disable' ) {
         Write-Host "[$(timeStamp)] App suggestions and auto-install: disabled" -ForegroundColor Gray
             Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "ContentDeliveryAllowed" -Type DWord -Value 0
@@ -1185,11 +1549,11 @@ Function AppSuggestionAndInstallation {
             Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SubscribedContent-353698Enabled" -Type DWord -Value 0
             Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SystemPaneSuggestionsEnabled" -Type DWord -Value 0
                 If (!( Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement" )) {
-                  New-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement" -Force | Out-Null
+                  Initialize-RegistryKey "HKCU:\Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement"
                 }
             Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement" -Name "ScoobeSystemSettingEnabled" -Type DWord -Value 0
                 If (!( Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsInkWorkspace" )) {
-                  New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsInkWorkspace" -Force | Out-Null
+                  Initialize-RegistryKey "HKLM:\SOFTWARE\Policies\Microsoft\WindowsInkWorkspace"
                 }
             Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsInkWorkspace" -Name "AllowSuggestedAppsInWindowsInkWorkspace" -Type DWord -Value 0
 
@@ -1232,7 +1596,7 @@ Function AddOEMInfo {
 
     If ( $Toggle -eq 'Enable' ) {
         $regKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\OEMInformation'
-        New-Item -Path $regKey -Force | Out-Null
+        Initialize-RegistryKey $regKey
         $regStrings = [ordered]@{ Logo=$Logo; Manufacturer=$Manufacturer; SupportPhone=$SupportPhone; SupportURL=$SupportURL }
         ForEach ($entry in $regStrings.GetEnumerator()) {
             If ([string]::IsNullOrWhiteSpace([string]$entry.Value)) {
@@ -1258,7 +1622,7 @@ Function BlockAutoDownload {
 
     If ( $Toggle -eq 'Enable' ) {
         Write-Host "[$(timeStamp)] Auto-download of apps from Store: blocked" -ForegroundColor Gray
-        New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\WindowsStore','HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' -Force | Out-Null
+        Initialize-RegistryKey 'HKLM:\SOFTWARE\Policies\Microsoft\WindowsStore','HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent'
         New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\WindowsStore' -Name 'AutoDownload' -PropertyType DWord -Value 2 -Force | Out-Null
         New-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent' -Name 'DisableWindowsConsumerFeatures' -PropertyType DWord -Value 1 -Force | Out-Null
     }
@@ -1274,7 +1638,7 @@ Function UserExperienceReporting {
     )
 
     $path = 'HKLM:\SOFTWARE\Policies\Microsoft\SQMClient\Windows'
-    New-Item -Path $path -Force | Out-Null
+    Initialize-RegistryKey $path
     If ( $Toggle -eq 'Enable' ) {
         Write-Host "[$(timeStamp)] User Experience Reporting (CEIP): enabled" -ForegroundColor Gray
         New-ItemProperty -Path $path -Name 'CEIPEnable' -PropertyType DWord -Value 1 -Force | Out-Null
@@ -1292,7 +1656,7 @@ Function LoginAnimation {
     )
 
     $path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
-    New-Item -Path $path -Force | Out-Null
+    Initialize-RegistryKey $path
     If ( $Toggle -eq 'Enable' ) {
         Write-Host "[$(timeStamp)] First logon animation: enabled" -ForegroundColor Gray
         New-ItemProperty -Path $path -Name 'EnableFirstLogonAnimation' -PropertyType DWord -Value 1 -Force | Out-Null
@@ -1325,7 +1689,9 @@ Function RevertContextMenuW11 {
             Switch ($converted_build) {
                 "Win11" {
                     Write-Host "[$(timeStamp)] Win11 context menu reverted to classic. Build: [$current_build]" -ForegroundColor Cyan
-                    New-Item -Path "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" -Value "" -Force | Out-Null
+                    $contextPath = 'HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32'
+                    Initialize-RegistryKey $contextPath
+                    Set-Item -LiteralPath $contextPath -Value ''
                     & $cmdExplorer
                 }
                 Default { Write-Host "[$(timeStamp)] Not Win11 [$converted_build] — context menu unchanged." -ForegroundColor Gray }
@@ -1378,7 +1744,7 @@ Function Invoke-WindowsInterfaceTweak {
 
     Function EnableStorageSense {
         $path = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\StorageSense'
-        New-Item -Path $path -Force | Out-Null
+        Initialize-RegistryKey $path
         New-ItemProperty -Path $path -Name 'AllowStorageSenseGlobal' -PropertyType DWord -Value 1 -Force | Out-Null
         New-ItemProperty -Path $path -Name 'AllowStorageSenseTemporaryFilesCleanup' -PropertyType DWord -Value 1 -Force | Out-Null
         New-ItemProperty -Path $path -Name 'ConfigStorageSenseGlobalCadence' -PropertyType DWord -Value 30 -Force | Out-Null
@@ -1460,44 +1826,40 @@ Function Invoke-WindowsInterfaceTweak {
         [switch]$Enable
         )
 
-        Switch ( $PSCmdlet.ParameterSetName ) {
-            "Disable" {
-                Write-Host "[$(timeStamp)] Network adapter power management: querying adapters.." -ForegroundColor Gray
-                If (( Get-CimInstance -ClassName Win32_ComputerSystem).PCSystemType -ne 2 ) {
-                    $adapterJob = Start-Job { Get-NetAdapter -Physical | Get-NetAdapterPowerManagement }
-                    If ( $adapterJob | Wait-Job -Timeout 15 ) {
-                        $Adapters = Receive-Job $adapterJob | Where-Object { $_.AllowComputerToTurnOffDevice -ne "Unsupported" }
-                        ForEach ( $Adapter in $Adapters ) {
-                            $Adapter.AllowComputerToTurnOffDevice = "Disabled"
-                            $Adapter | Set-NetAdapterPowerManagement
-                        }
-                        Write-Host "[$(timeStamp)] Network adapter power management: disabled" -ForegroundColor Gray
-                    } Else {
-                        Write-Host "[$(timeStamp)] Network adapter query timed out. Skipping adapter power management." -ForegroundColor Yellow
-                        Stop-Job $adapterJob
-                    }
-                    Remove-Job $adapterJob -Force
-                }
+        If ((Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop).PCSystemType -eq 2) {
+            Write-Host "[$(timeStamp)] Skipping the desktop network power setting on a laptop." -ForegroundColor Gray
+            Return
+        }
+        $physicalNames = @(Get-NetAdapter -Physical -ErrorAction Stop | ForEach-Object Name)
+        Write-Host "[$(timeStamp)] Querying supported network adapter power settings." -ForegroundColor Gray
+        $adapterJob = Get-NetAdapterPowerManagement -Name '*' -AsJob -ErrorAction Stop
+        Try {
+            If (!(Wait-Job -Job $adapterJob -Timeout 15)) {
+                Write-Warning "[$(timeStamp)] Network adapter power settings query timed out."
+                Return
             }
-            "Enable" {
-                Write-Host "[$(timeStamp)] Network adapter power management: querying adapters.." -ForegroundColor Gray
-                If (( Get-CimInstance -ClassName Win32_ComputerSystem).PCSystemType -ne 2 ) {
-                    $adapterJob = Start-Job { Get-NetAdapter -Physical | Get-NetAdapterPowerManagement }
-                    If ( $adapterJob | Wait-Job -Timeout 15 ) {
-                        $Adapters = Receive-Job $adapterJob | Where-Object { $_.AllowComputerToTurnOffDevice -ne "Unsupported" }
-                        ForEach ( $Adapter in $Adapters ) {
-                            $Adapter.AllowComputerToTurnOffDevice = "Enabled"
-                            $Adapter | Set-NetAdapterPowerManagement
-                        }
-                        Write-Host "[$(timeStamp)] Network adapter power management: enabled" -ForegroundColor Gray
-                    } Else {
-                        Write-Host "[$(timeStamp)] Network adapter query timed out. Skipping adapter power management." -ForegroundColor Yellow
-                        Stop-Job $adapterJob
-                    }
-                    Remove-Job $adapterJob -Force
+            $adapters = @(Receive-Job -Job $adapterJob -ErrorAction Stop | Where-Object {
+                $_.Name -in $physicalNames -and [string]$_.AllowComputerToTurnOffDevice -in @('Enabled','Disabled')
+            })
+        } Finally {
+            Remove-Job -Job $adapterJob -Force -ErrorAction SilentlyContinue
+        }
+        If (!$adapters.Count) {
+            Write-Host "[$(timeStamp)] No physical network adapters expose the power-off setting." -ForegroundColor Gray
+            Return
+        }
+        $desired = If ($Disable) { 'Disabled' } Else { 'Enabled' }
+        $failed = [Collections.Generic.List[string]]::new()
+        ForEach ($adapter in $adapters) {
+            Try {
+                If ([string]$adapter.AllowComputerToTurnOffDevice -ne $desired) {
+                    $adapter.AllowComputerToTurnOffDevice = $desired
+                    Set-NetAdapterPowerManagement -InputObject $adapter -ErrorAction Stop
                 }
-            }
-        } # End Switch
+                Write-Host "[$(timeStamp)] Adapter [$($adapter.Name)] automatic power-off: $desired." -ForegroundColor Gray
+            } Catch { $failed.Add("[$($adapter.Name)]: $($_.Exception.Message.Trim())") }
+        }
+        If ($failed.Count) { Throw ($failed -join ' | ') }
     } # End PCTurnOffDevice Function
 
     Function WindowsManageDefaultPrinter {
@@ -1532,7 +1894,7 @@ Function Invoke-WindowsInterfaceTweak {
             "LargeIcons" {
                 Write-Host "[$(timeStamp)] Control Panel view: Large Icons" -ForegroundColor Gray
                 If (!( Test-Path -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel )) {
-                    New-Item -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel -Force | Out-Null
+                    Initialize-RegistryKey HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel
                 }
                 New-ItemProperty -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel -Name AllItemsIconView -PropertyType DWord -Value 0 -Force | Out-Null
                 New-ItemProperty -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel -Name StartupPage -PropertyType DWord -Value 1 -Force | Out-Null
@@ -1540,7 +1902,7 @@ Function Invoke-WindowsInterfaceTweak {
             "Category" {
               Write-Host "[$(timeStamp)] Control Panel view: Category" -ForegroundColor Gray
               If (!( Test-Path -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel )) {
-                  New-Item -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel -Force | Out-Null
+                  Initialize-RegistryKey HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel
               }
               New-ItemProperty -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel -Name AllItemsIconView -PropertyType DWord -Value 0 -Force | Out-Null
               New-ItemProperty -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel -Name StartupPage -PropertyType DWord -Value 0 -Force | Out-Null
@@ -1580,14 +1942,14 @@ Function Invoke-WindowsInterfaceTweak {
             "Hide" {
                 Write-Host "[$(timeStamp)] People on taskbar: hidden" -ForegroundColor Gray
                 If (!( Test-Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People )) {
-                    New-Item -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People -Force | Out-Null
+                    Initialize-RegistryKey HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People
                 }
                 New-ItemProperty -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People -Name PeopleBand -PropertyType DWord -Value 0 -Force | Out-Null
             }
             "Show" {
                 Write-Host "[$(timeStamp)] People on taskbar: shown" -ForegroundColor Gray
                 If (!( Test-Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People )) {
-                    New-Item -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People -Force | Out-Null
+                    Initialize-RegistryKey HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People
                 }
                 New-ItemProperty -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\People -Name PeopleBand -PropertyType DWord -Value 1 -Force | Out-Null
             }
@@ -1700,12 +2062,13 @@ Function New-DailyRestorePoint {
         Write-Host "[$(timeStamp)] A pre-change restore point was already attempted today; skipping." -ForegroundColor Gray
         Return
     }
-    New-Item -Path $markerPath -Force | Out-Null
-    New-ItemProperty -Path $markerPath -Name LastRestorePointDate -PropertyType String -Value $today -Force | Out-Null
     Try {
+        Initialize-RegistryKey $markerPath
+        New-ItemProperty -Path $markerPath -Name LastRestorePointDate -PropertyType String -Value $today -Force -ErrorAction Stop | Out-Null
         Enable-ComputerRestore -Drive "$env:SystemDrive\" -ErrorAction SilentlyContinue
-        Checkpoint-Computer -Description "$($script:AppName) pre-change $today" -RestorePointType MODIFY_SETTINGS -ErrorAction Stop
-        Write-Host "[$(timeStamp)] Created today's pre-change System Restore point." -ForegroundColor Cyan
+        $restoreWarnings = @()
+        Checkpoint-Computer -Description "$($script:AppName) pre-change $today" -RestorePointType MODIFY_SETTINGS -ErrorAction Stop -WarningVariable restoreWarnings
+        If (!$restoreWarnings) { Write-Host "[$(timeStamp)] Created today's pre-change System Restore point." -ForegroundColor Cyan }
     } Catch {
         Write-Warning "[$(timeStamp)] Windows did not create a restore point: $($_.Exception.Message)"
     }
@@ -1715,24 +2078,24 @@ Function Set-PrivacySetting {
     Param ([ValidateSet('AdvertisingId','ActivityHistory','TailoredExperiences','DeliveryOptimization','Location')][string]$Setting)
     Switch ($Setting) {
         'AdvertisingId' {
-            New-Item 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo' -Force | Out-Null
+            Initialize-RegistryKey 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo'
             New-ItemProperty 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo' -Name Enabled -PropertyType DWord -Value 0 -Force | Out-Null
         }
         'ActivityHistory' {
-            New-Item 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Force | Out-Null
+            Initialize-RegistryKey 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System'
             New-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Name PublishUserActivities -PropertyType DWord -Value 0 -Force | Out-Null
             New-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -Name UploadUserActivities -PropertyType DWord -Value 0 -Force | Out-Null
         }
         'TailoredExperiences' {
-            New-Item 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Privacy' -Force | Out-Null
+            Initialize-RegistryKey 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Privacy'
             New-ItemProperty 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Privacy' -Name TailoredExperiencesWithDiagnosticDataEnabled -PropertyType DWord -Value 0 -Force | Out-Null
         }
         'DeliveryOptimization' {
-            New-Item 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization' -Force | Out-Null
+            Initialize-RegistryKey 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization'
             New-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization' -Name DODownloadMode -PropertyType DWord -Value 0 -Force | Out-Null
         }
         'Location' {
-            New-Item 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location' -Force | Out-Null
+            Initialize-RegistryKey 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location'
             New-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location' -Name Value -PropertyType String -Value Deny -Force | Out-Null
         }
     }
@@ -1769,7 +2132,7 @@ Function Disable-WindowsAIFeatures {
     If ($NotepadPolicy) { $policies.Add(@('HKLM:\SOFTWARE\Policies\WindowsNotepad','DisableAIFeatures',1)) }
 
     ForEach ($policy in $policies) {
-        New-Item -Path $policy[0] -Force | Out-Null
+        Initialize-RegistryKey $policy[0]
         New-ItemProperty -Path $policy[0] -Name $policy[1] -PropertyType DWord -Value $policy[2] -Force | Out-Null
     }
     Write-Host "[$(timeStamp)] Applied [$($policies.Count)] machine/current-user Windows AI policies." -ForegroundColor Gray
@@ -1837,9 +2200,15 @@ Function Repair-WindowsUpdate {
 }
 
 Function Repair-NetworkStack {
-    & ipconfig.exe /flushdns
-    & netsh.exe winsock reset
-    & netsh.exe int ip reset
+    $failed = @(
+        & ipconfig.exe /flushdns | Out-Host
+        If ($LASTEXITCODE -ne 0) { 'DNS flush' }
+        & netsh.exe winsock reset | Out-Host
+        If ($LASTEXITCODE -ne 0) { 'Winsock reset' }
+        & netsh.exe int ip reset | Out-Host
+        If ($LASTEXITCODE -ne 0) { 'TCP/IP reset' }
+    )
+    If ($failed.Count) { Throw "Windows network repair failed for: $($failed -join ', ')." }
     Write-Host "[$(timeStamp)] Network stack reset completed; restart Windows before troubleshooting further." -ForegroundColor Yellow
 }
 
@@ -1850,7 +2219,9 @@ Function Repair-WinGet {
     Add-AppxPackage -DisableDevelopmentMode -Register $manifest -ErrorAction Stop
     If (!(Get-Command winget.exe -ErrorAction SilentlyContinue)) { Throw 'App Installer was registered but WinGet is still unavailable. Sign out and back in, then retry.' }
     & winget.exe source reset --force
+    $resetExitCode = $LASTEXITCODE
     & winget.exe source update
+    If ($resetExitCode -ne 0 -or $LASTEXITCODE -ne 0) { Throw "WinGet source repair returned exit codes $resetExitCode (reset) and $LASTEXITCODE (update)." }
 }
 
 Function Get-DiagnosticSnapshot {
@@ -1958,6 +2329,7 @@ Function Get-RegistryValueState {
 Function Get-ActionState {
     Param ([string]$ActionId)
     Try {
+        If ($ActionId -eq 'NewsTaskbar' -and !(Test-NewsAndInterestsPolicy)) { Return 'Unavailable (Windows 10 policy)' }
         $states = @{
             IPv6=@('HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters','DisabledComponents',32)
             FastStartup=@('HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power','HiberbootEnabled',0)
@@ -2072,12 +2444,12 @@ Function Get-ActionCatalog {
         New-InstallerAction 'Setup' 'Prerequisites' 'Install / update prerequisites' 'Prepares the package managers and PowerShell modules this tool needs. WinGet is preferred; Chocolatey remains available as a fallback.' $false { PreRequisites -Items @($script:RunOptions.PrerequisiteItems) }
         New-InstallerAction 'Setup' 'Weather' 'Show local weather' 'Displays wttr.in''s detailed current-day forecast in the console and caches it in the GUI, including morning, noon, evening, and night conditions.' $false { myWeather }
         New-InstallerAction 'Diagnostics' 'DiagnosticsReport' 'Create hardware and health report' 'Collects hardware, Windows, disk, network, service, and restart information using CIM, then exports readable HTML and machine-readable JSON reports.' $false { Export-DiagnosticReport -OutputPath ([string]$script:RunOptions.ReportOutputPath) }
-        New-InstallerAction 'Hardware' 'DeviceHealth' 'Repair devices and missing drivers' 'Checks Plug and Play errors, enables disabled devices, and installs missing drivers.' $false { PnPDevices }
+        New-InstallerAction 'Hardware' 'DeviceHealth' 'Repair devices and missing drivers' 'Checks Plug and Play problems, matches available drivers to the current hardware, and reports unresolved devices.' $false { PnPDevices }
         New-InstallerAction 'Hardware' 'OEMInfo' 'Set OEM support information' 'Prefills detected values and lets you edit the manufacturer, support details, and logo.' $true { AddOEMInfo -Toggle Enable -Manufacturer $script:RunOptions.OEMManufacturer -SupportPhone $script:RunOptions.OEMSupportPhone -SupportURL $script:RunOptions.OEMSupportURL -Logo $script:RunOptions.OEMLogo }
         New-InstallerAction 'Software' 'BaseSoftware' 'Install / update common software' 'Installs common applications through WinGet first, with Chocolatey fallback. Java uses Eclipse Temurin, a free OpenJDK Java runtime.' $false { ChocoSoftware -Packages @($script:RunOptions.SoftwarePackages) -IncludeGpuDrivers ([bool]$script:RunOptions.InstallGpuDrivers) }
         New-InstallerAction 'Software' 'DefaultApps' 'Provision Chrome and Adobe defaults' 'Sets Chrome for web links and Adobe Reader for PDF files for every new Windows profile.' $true { Set-DefaultApplicationsForNewProfiles -Chrome ([bool]$script:RunOptions.SetChromeDefault) -AdobePdf ([bool]$script:RunOptions.SetAdobePdfDefault) }
         New-InstallerAction 'Software' 'AdGuard' 'Install AdGuard for Chrome and Edge' 'Uses machine browser policies so AdGuard installs for current and future browser profiles.' $true { Install-AdGuardBrowserPolicies -Chrome ([bool]$script:RunOptions.InstallAdGuardChrome) -Edge ([bool]$script:RunOptions.InstallAdGuardEdge) }
-        New-InstallerAction 'Software' 'WindowsUpdates' 'Install Windows and driver updates' 'Runs PSWindowsUpdate and the Microsoft driver update service.' $false { WindowUpdatesInstall }
+        New-InstallerAction 'Software' 'WindowsUpdates' 'Install Windows and driver updates' 'Runs PSWindowsUpdate and checks the configured Windows Update source for drivers.' $false { WindowUpdatesInstall }
         New-InstallerAction 'Software' 'PhotoViewer' 'Restore classic Windows Photo Viewer' 'Registers classic Photo Viewer and common image associations.' $false { WindowsPhotoViewer -Restore Enable }
         New-InstallerAction 'Software' 'RemoveBloatware' 'Remove bundled bloatware' 'Safely targets known consumer and promotional Store apps instead of removing unknown Windows components.' $false { RemoveBloatware }
         New-InstallerAction 'Software' 'RemoveMcAfee' 'Remove McAfee products' 'Runs registered McAfee and WebAdvisor uninstallers and removes provisioned McAfee Store packages.' $false { Remove-McAfeeProducts }
@@ -2097,7 +2469,7 @@ Function Get-ActionCatalog {
         New-InstallerAction 'Windows' 'AutoArrange' 'Auto-arrange desktop icons' 'Enables auto-arrange and align-to-grid.' $true { AutoArrange -enable $true }
         New-InstallerAction 'Windows' 'VerboseStatus' 'Enable verbose sign-in status' 'Shows detailed startup, sign-in, and shutdown status messages.' $true { EnableVerboseStatus -VerboseLoginStatus Enable }
         New-InstallerAction 'Windows' 'LoginAnimation' 'Disable first sign-in animation' 'Disables the first-logon welcome animation.' $true { LoginAnimation -Toggle Disable }
-        New-InstallerAction 'Windows' 'NewsTaskbar' 'Hide News and Interests' 'Disables the News and Interests taskbar policy.' $true { NewsAndInterestsTaskbar -Hide }
+        New-InstallerAction 'Windows' 'NewsTaskbar' 'Hide News and Interests' 'Disables the legacy News and Interests taskbar feed on supported Windows 10 editions.' $true { NewsAndInterestsTaskbar -Hide }
         New-InstallerAction 'Windows' 'MeetNow' 'Hide Meet Now' 'Hides Meet Now through Explorer policy.' $true { RemoveMeetNow }
         New-InstallerAction 'Windows' 'ClassicContextMenu' 'Use classic Windows 10 context menu' 'Restores the full Windows 10-style context menu on Windows 11.' $true { RevertContextMenuW11 -RestoreMenu Enable }
         New-InstallerAction 'Windows' 'UpdateHours' 'Set Windows Update active hours' 'Sets the hours when Windows should avoid automatic restarts. Leave both fields blank to retain this tool''s 8 PM through 5 AM default.' $true { SetWindowsUpdateHours -startTime (Resolve-UpdateActiveHour -Value $script:RunOptions.UpdateActiveHoursStart -Default 20) -endTime (Resolve-UpdateActiveHour -Value $script:RunOptions.UpdateActiveHoursEnd -Default 5) }
@@ -2212,7 +2584,8 @@ Function Get-RegistryBackupSpecs {
 }
 
 Function New-SettingsBackup {
-    Param ([string[]]$ActionIds)
+    Param ([string[]]$ActionIds,[switch]$AllowPartial)
+    $ErrorActionPreference = 'Stop'
 
     New-Item -ItemType Directory -Path $script:BackupRoot -Force | Out-Null
     $specs = Get-RegistryBackupSpecs
@@ -2220,6 +2593,7 @@ Function New-SettingsBackup {
 
     ForEach ($actionId in $ActionIds) {
         If (!$specs.ContainsKey($actionId)) { Continue }
+        If ($actionId -eq 'NewsTaskbar' -and !(Test-NewsAndInterestsPolicy)) { Continue }
         ForEach ($spec in $specs[$actionId]) {
             $item = Get-Item -LiteralPath $spec.Path -ErrorAction SilentlyContinue
             ForEach ($name in $spec.Names) {
@@ -2244,7 +2618,7 @@ Function New-SettingsBackup {
         $specialEntries.Add([pscustomobject]@{ ActionId='RenameComputer'; Type='ComputerName'; Value=$env:COMPUTERNAME })
     }
     If ($ActionIds -contains 'DNS') {
-        ForEach ($adapter in @(Get-DnsClientServerAddress -ErrorAction SilentlyContinue)) {
+        ForEach ($adapter in @(Get-DnsClientServerAddress -ErrorAction Stop)) {
             $specialEntries.Add([pscustomobject]@{ ActionId='DNS'; Type='DnsServers'; InterfaceIndex=$adapter.InterfaceIndex; AddressFamily=[string]$adapter.AddressFamily; Value=@($adapter.ServerAddresses) })
         }
     }
@@ -2260,6 +2634,10 @@ Function New-SettingsBackup {
             If ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $associationBackup)) { Throw 'DISM could not export the current default application associations.' }
             $encodedAssociations = [Convert]::ToBase64String([IO.File]::ReadAllBytes($associationBackup))
             $specialEntries.Add([pscustomobject]@{ ActionId='DefaultApps'; Type='DefaultAssociations'; Value=$encodedAssociations })
+        } Catch {
+            If (!$AllowPartial) { Throw }
+            Write-Warning "[$(timeStamp)] Default Apps backup failed: $($_.Exception.Message)"
+            $ActionIds = @($ActionIds | Where-Object { $_ -ne 'DefaultApps' })
         } Finally {
             Remove-Item -LiteralPath $associationBackup -Force -ErrorAction SilentlyContinue
         }
@@ -2272,13 +2650,13 @@ Function New-SettingsBackup {
         Computer = $env:COMPUTERNAME
         User = [Environment]::UserName
         Actions = @($ActionIds)
-        Registry = @($registryEntries)
-        Special = @($specialEntries)
+        Registry = $registryEntries.ToArray()
+        Special = $specialEntries.ToArray()
     }
     $path = Join-Path $script:BackupRoot ("Settings-{0}-{1}.json" -f (Get-Date -Format 'yyyy-MM-dd_HH.mm.ss'),[guid]::NewGuid().ToString('N').Substring(0,8))
     $backup | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $path -Encoding UTF8
     Write-Host "[$(timeStamp)] Backup: [%TEMP%\New Computer Install\Backups\$([IO.Path]::GetFileName($path))]" -ForegroundColor Cyan
-    Return $path
+    Return $backup
 }
 
 Function Get-LatestBackup {
@@ -2299,6 +2677,7 @@ Function Restore-SettingsBackup {
     $allowed = @{}
     ForEach ($actionId in $ActionIds) {
         If (!$specs.ContainsKey($actionId)) { Continue }
+        If ($actionId -eq 'NewsTaskbar' -and !(Test-NewsAndInterestsPolicy)) { Continue }
         ForEach ($spec in $specs[$actionId]) {
             ForEach ($name in $spec.Names) { $allowed["$actionId|$($spec.Path)|$name"] = $true }
         }
@@ -2308,7 +2687,7 @@ Function Restore-SettingsBackup {
         If ($ActionIds -notcontains $entry.ActionId -or !$allowed.ContainsKey("$($entry.ActionId)|$($entry.Path)|$($entry.Name)")) { Continue }
         If ($entry.Exists) {
             If ($entry.Kind -notin @('String','ExpandString','Binary','DWord','MultiString','QWord')) { Throw "Unsafe registry type [$($entry.Kind)] in backup." }
-            New-Item -Path $entry.Path -Force | Out-Null
+            Initialize-RegistryKey $entry.Path
             $value = If ($entry.Kind -eq 'Binary') { [Convert]::FromBase64String([string]$entry.Value) } Else { $entry.Value }
             New-ItemProperty -Path $entry.Path -Name $entry.Name -PropertyType $entry.Kind -Value $value -Force | Out-Null
         } ElseIf (Test-Path -LiteralPath $entry.Path) {
@@ -2324,14 +2703,23 @@ Function Restore-SettingsBackup {
             'PowerScheme' { If ([string]$entry.Value -match '^[0-9a-fA-F-]{36}$') { powercfg /setactive $entry.Value | Out-Null } }
             'ComputerName' { If ((Test-ComputerName -Name ([string]$entry.Value)) -and [string]$entry.Value -ine $env:COMPUTERNAME) { Rename-Computer -NewName $entry.Value -Force } }
             'DnsServers' {
+                $adapter = Get-DnsClientServerAddress -InterfaceIndex ([int]$entry.InterfaceIndex) |
+                    Where-Object { [string]$_.AddressFamily -eq [string]$entry.AddressFamily }
+                If (!$adapter) { Write-Warning "DNS interface [$($entry.InterfaceIndex)] and address family [$($entry.AddressFamily)] are unavailable."; Continue }
                 $servers = @($entry.Value | Where-Object { $_ })
-                If ($servers) { Set-DnsClientServerAddress -InterfaceIndex ([int]$entry.InterfaceIndex) -ServerAddresses $servers -ErrorAction Stop }
-                Else { Set-DnsClientServerAddress -InterfaceIndex ([int]$entry.InterfaceIndex) -ResetServerAddresses -ErrorAction Stop }
+                If ($servers) { Set-DnsClientServerAddress -InputObject $adapter -ServerAddresses $servers -ErrorAction Stop }
+                Else { Set-DnsClientServerAddress -InputObject $adapter -ResetServerAddresses -ErrorAction Stop }
             }
             'ContextMenu' {
                 $contextPath = 'HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32'
-                If ($entry.Exists) { New-Item -Path $contextPath -Value $entry.Value -Force | Out-Null }
-                Else { Remove-Item -LiteralPath $contextPath -Force -ErrorAction SilentlyContinue }
+                If ($entry.Exists) { Initialize-RegistryKey $contextPath }
+                If ($entry.Exists -and $null -ne $entry.Value) {
+                    Set-Item -LiteralPath $contextPath -Value $entry.Value
+                } ElseIf (Test-Path -LiteralPath $contextPath) {
+                    Remove-ItemProperty -LiteralPath $contextPath -Name '(default)' -ErrorAction SilentlyContinue
+                    $key = Get-Item -LiteralPath $contextPath
+                    If (!$entry.Exists -and $key.ValueCount -eq 0 -and $key.SubKeyCount -eq 0) { Remove-Item -LiteralPath $contextPath }
+                }
             }
             'DefaultAssociations' {
                 $restorePath = Join-Path $script:BackupRoot ("Restore-DefaultAssociations-{0}.xml" -f [guid]::NewGuid().ToString('N'))
@@ -2364,7 +2752,9 @@ Function Resolve-ActionSelection {
 Function Invoke-InstallerActions {
     Param ([object[]]$SelectedActions)
     $ids = @($SelectedActions.Id)
-    $null = New-SettingsBackup -ActionIds $ids
+    $backup = $null
+    Try { $backup = New-SettingsBackup -ActionIds $ids -AllowPartial }
+    Catch { Write-Warning "[$(timeStamp)] Settings backup failed: $($_.Exception.Message)" }
     If (@($SelectedActions | Where-Object Category -NE 'Diagnostics').Count) { New-DailyRestorePoint }
     $completed = 0
     $failed = [Collections.Generic.List[string]]::new()
@@ -2373,28 +2763,31 @@ Function Invoke-InstallerActions {
         $previousErrorAction = $ErrorActionPreference
         Try {
             $ErrorActionPreference = 'Stop'
-            & $action.Command
+            If ($action.Reversible -and $action.Id -notin $backup.Actions) { Throw 'Required settings backup is unavailable. No changes were applied for this action.' }
+            & $action.Command | Out-Host
             $completed++
         } Catch {
             $failed.Add([string]$action.Name)
-            Write-Error "[$(timeStamp)] $($action.Name) failed: $($_.Exception.Message)"
+            Write-Host "[$(timeStamp)] $($action.Name) failed: $($_.Exception.Message.Trim())" -ForegroundColor Red
         } Finally {
             $ErrorActionPreference = $previousErrorAction
         }
     }
     Write-Host "`n[$(timeStamp)] Action summary: $completed completed, $($failed.Count) failed." -ForegroundColor $(If($failed.Count){'Yellow'}Else{'Green'})
     If ($failed.Count) { Write-Warning "[$(timeStamp)] Failed actions: $($failed -join ', ')" }
+    Return $failed.Count
 }
 
 Function Complete-Session {
+    If ($null -ne $script:OriginalProcessExecutionPolicy) {
+        Set-ExecutionPolicy -Scope Process -ExecutionPolicy $script:OriginalProcessExecutionPolicy -Force -ErrorAction SilentlyContinue
+    }
     If ($script:StopWatch) {
         $script:StopWatch.Stop()
         Write-Host "[$(timeStamp)] Finished in $($script:StopWatch.Elapsed). Log: $($script:Log)" -ForegroundColor Cyan
     }
     Try { Stop-Transcript | Out-Null } Catch { }
     Try { Pop-Location -StackName Stack2 } Catch { }
-    If ($null -ne $script:ErrorActionPreferenceBeforeRun) { $ErrorActionPreference = $script:ErrorActionPreferenceBeforeRun }
-    If ($null -ne $script:ProgressPreferenceBeforeRun) { $ProgressPreference = $script:ProgressPreferenceBeforeRun }
 }
 
 Function New-RunOptionsFile {
@@ -3038,6 +3431,76 @@ If ($SelfTest) {
         If (!$presetIds -or @($presetIds | Where-Object { $_ -notin $catalog.Id })) { Throw "Preset [$presetName] contains invalid actions." }
     }
     If (@(Get-PresetActionIds -Catalog $catalog -Name Full | Where-Object { $_ -in @($catalog | Where-Object Category -In @('Repair','Diagnostics','Optional') | ForEach-Object Id) }).Count) { Throw 'The Full preset must not run repairs, reports, or optional-risk actions automatically.' }
+    & {
+        Function New-SettingsBackup { Return @{ Actions = @() } }
+        Function New-DailyRestorePoint { }
+        $ran = [Collections.Generic.List[string]]::new()
+        $testActions = @(
+            New-InstallerAction 'Hardware' 'DriverTest' 'Driver test' '' $false {
+                Throw [Runtime.InteropServices.COMException]::new('Driver search failed', [int]0x8024802A)
+            }
+            New-InstallerAction 'System' 'BackupTest' 'Backup test' '' $true { $ran.Add('Unbacked action') }
+            New-InstallerAction 'Diagnostics' 'NextTest' 'Later action' '' $false { $ran.Add('Later action') }
+        )
+        $results = @(Invoke-InstallerActions -SelectedActions $testActions 2>&1 3>$null 6>$null)
+        If ($results[-1] -ne 2 -or $ran.Count -ne 1 -or $ran[0] -ne 'Later action') { Throw 'Action isolation self-test failed.' }
+    }
+    & {
+        $moduleAttempts = [Collections.Generic.List[bool]]::new()
+        Function Enable-PrerequisiteModuleLoading { }
+        Function Update-GalleryModule { Param ([string]$Name,[switch]$Repair) $moduleAttempts.Add([bool]$Repair) }
+        Function Import-Module {
+            Param ([string]$Name,[switch]$Global,[switch]$PassThru,[switch]$Force,[string]$ErrorAction)
+            If (!$Force) { Throw 'Simulated module load failure.' }
+            [pscustomobject]@{ Version='2.2.1.5'; ExportedCommands=@{ 'Get-WindowsUpdate'=$true } }
+        }
+        Try {
+            Initialize-PSWindowsUpdate 3>$null 6>$null
+            Initialize-PSWindowsUpdate 3>$null 6>$null
+            If ($moduleAttempts.Count -ne 2 -or $moduleAttempts[0] -or !$moduleAttempts[1]) { Throw 'PSWindowsUpdate repair self-test failed.' }
+        } Finally {
+            $script:PSWindowsUpdateReady = $false
+        }
+    }
+    $driverDevices = @(
+        @{ Device='Test network device'; HardwareIds=@('PCI\TEST_NET'); CompatibleIds=@('PCI\TEST_CLASS') }
+        @{ Device='Test Bluetooth device'; HardwareIds=@('USB\TEST_BT'); CompatibleIds=@() }
+        @{ Device='Second test Bluetooth device'; HardwareIds=@('USB\TEST_BT'); CompatibleIds=@() }
+    )
+    $driverOffers = @(
+        [pscustomobject]@{ Title='Optional network'; DriverHardwareID='pci\test_net'; BrowseOnly=$true; Identity=@{UpdateID='network'} }
+        [pscustomobject]@{ Title='Generic'; DriverHardwareID='PCI\TEST_CLASS'; BrowseOnly=$false; Identity=@{UpdateID='generic'} }
+        [pscustomobject]@{ Title='Bluetooth'; WindowsDriverUpdateEntries=@(@{DriverHardwareID='USB\TEST_BT'}); BrowseOnly=$false; Identity=@{UpdateID='bluetooth'} }
+        [pscustomobject]@{ Title='Unrelated'; DriverHardwareID='USB\OTHER'; BrowseOnly=$false; Identity=@{UpdateID='other'} }
+    )
+    $matchedDrivers = @(Select-DriverUpdates -Updates $driverOffers -Devices $driverDevices 6>$null)
+    If (($matchedDrivers.Title -join ',') -ne 'Optional network,Bluetooth') { Throw 'Driver hardware matching self-test failed.' }
+    $fixtureId = [guid]'01010101-0202-0303-0404-050505050505'
+    $catalogFixture = @"
+downloadInformation[0].updateID = '$fixtureId';
+downloadInformation[0].files[0].url = 'http://catalog.s.download.windowsupdate.com/test.cab';
+downloadInformation[0].files[0].sha256 = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+downloadInformation[0].files[1].url = 'https://download.windowsupdate.com.example.net/test.cab';
+downloadInformation[0].files[1].sha256 = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+downloadInformation[0].files[2].url = 'https://download.windowsupdate.com/test.cab';
+"@
+    $catalogDownloads = @(Get-DriverCatalogDownloads -Html $catalogFixture -UpdateId $fixtureId)
+    If ($catalogDownloads.Count -ne 1 -or $catalogDownloads[0].Uri.Scheme -ne 'https' -or $catalogDownloads[0].Hash -ne ('0' * 64)) {
+        Throw 'Driver Catalog download validation self-test failed.'
+    }
+    If ((Test-DriverCatalogProduct 'Windows 11 Client, version 25H2 and later' 'Windows 11' '24H2') -or
+        !(Test-DriverCatalogProduct 'Windows 11 Client, version 24H2 and later' 'Windows 11' '25H2')) {
+        Throw 'Driver Catalog Windows release validation self-test failed.'
+    }
+    & {
+        $os = @{ CurrentBuild='26200'; InstallationType='Client'; EditionID='Professional' }
+        Function Get-ItemProperty { Param([string]$LiteralPath,[string]$ErrorAction) $os }
+        If (Test-NewsAndInterestsPolicy) { Throw 'The Windows 10 feed policy was enabled on Windows 11.' }
+        $os.CurrentBuild = '19045'
+        If (!(Test-NewsAndInterestsPolicy)) { Throw 'The feed policy was disabled on supported Windows 10.' }
+        $os.EditionID = 'Core'
+        If (Test-NewsAndInterestsPolicy) { Throw 'The feed policy was enabled on Windows Home.' }
+    }
     Write-Output "$($script:AppName) $($script:AppVersion) self-test passed: $($catalog.Count) actions, $($backupSpecs.Count) registry backup groups."
     Return
 }
@@ -3061,6 +3524,7 @@ If ($BackupOnly) { $forwardArguments += '-BackupOnly' }
 If ($RestoreBackup) { $forwardArguments += @('-RestoreBackup',$RestoreBackup) }
 If ($SettingsFile) { $forwardArguments += @('-SettingsFile',$SettingsFile) }
 If ($PSBoundParameters.ContainsKey('ComputerName')) { $forwardArguments += @('-ComputerName',$ComputerName) }
+If ($DriverSource) { $forwardArguments += @('-DriverSource',$script:RunOptions.DriverSource) }
 If ($Theme) { $forwardArguments += @('-Theme',$Theme) }
 If ($NoReboot) { $forwardArguments += '-NoReboot' }
 If ($PauseOnExit) { $forwardArguments += '-PauseOnExit' }
@@ -3071,9 +3535,11 @@ If (!(Test-IsAdministrator)) {
     Return
 }
 
-Initialize-Session
+$ProgressPreference = 'SilentlyContinue'
 $offerReboot = $false
+$resultCode = 0
 Try {
+    Initialize-Session
     If ($Prerequisites -eq 'Install') {
         PreRequisites -Items @($script:RunOptions.PrerequisiteItems)
     } ElseIf ($Prerequisites -eq 'Uninstall') {
@@ -3085,10 +3551,13 @@ Try {
         } ElseIf ($BackupOnly) {
             $null = New-SettingsBackup -ActionIds @($selectedActions.Id)
         } Else {
-            Invoke-InstallerActions -SelectedActions $selectedActions
+            If ((Invoke-InstallerActions -SelectedActions $selectedActions) -gt 0) { $resultCode = 1 }
             $offerReboot = $true
         }
     }
+} Catch {
+    Write-Host "[$(timeStamp)] $($_.Exception.Message.Trim())" -ForegroundColor Red
+    $resultCode = 1
 } Finally {
     Complete-Session
     If ($SettingsFile) {
@@ -3107,3 +3576,4 @@ If ($PauseOnExit) {
     Try { $null=$Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown') } Catch { $null=Read-Host }
 }
 If ($offerReboot -and !$NoReboot) { RebootNow }
+If ($resultCode) { Exit $resultCode }

@@ -8,7 +8,7 @@ _______________
 _______________
 ## How do I run this?
 
-### Version 2.0.0
+### Version 2.0.1
 
 - Double-click `New Computer Install.exe` to run the complete original workflow.
 - Double-click `New Computer Install GUI.bat` to download the current GitHub release and launch its selectable GUI (dark mode by default; light mode is available in the header).
@@ -34,11 +34,21 @@ It's easy! Either download the .ps1 file, right click, and run with powershell (
 
 The program requests administrator access only when it is ready to apply changes. Console output is also saved to a timestamped log in `C:\Windows\Temp`.
 
-The clean header consistently shows **Ko-fi**, **Donate**, and **v2.0.0 by Hor318**. The GUI and compiled EXE use the included project icon.
+The header shows **Ko-fi**, **Donate**, and **v2.0.1 by Hor318**. The GUI and compiled EXE use the included project icon.
 
 The included build batch compiles the PowerShell script as a console-capable EXE so full-run and selected-run output remains visible.
 
-Long-running PowerShell progress rendering is suppressed because compiled console hosts can print each refresh as another line. Milestone messages, warnings, errors, and the final log remain visible. Missing PackageManagement or PowerShellGet modules are bootstrapped from the official PowerShell Gallery before prerequisite installation continues.
+The installer suppresses repeated PowerShell and Chocolatey download progress while keeping milestones and failures in the log. It prepares PackageManagement, PowerShellGet, NuGet, and PSWindowsUpdate automatically. Running Windows Updates by itself also checks and repairs PSWindowsUpdate as needed. On a PC where Windows PowerShell defaults to Restricted, the installer uses RemoteSigned for its own process while loading modules. Group Policy takes precedence.
+
+Each selected action reports its own failures and the installer continues with the remaining actions. Driver searches use the Windows Update source configured on the PC. A reversible action is skipped if its settings could not be backed up. For example, a DISM default-association export failure skips Default Apps while the other backed-up settings can still be applied. An incomplete action run exits with code `1` after printing the summary and writing the session log.
+
+The News and Interests policy applies to supported Windows 10 editions. On desktop PCs, **Keep network adapters powered** only changes physical adapters that expose the power-off setting.
+
+**Repair devices and missing drivers** rescans the current PC, enables disabled devices, and attempts to restart devices reporting Code 43. It checks regular and optional Windows Update driver offers against hardware and compatible IDs. For unresolved devices, it automatically searches the Microsoft Update Catalog by hardware ID when the PC's update policies permit public driver downloads. It checks Windows release, architecture, SHA-256, and Microsoft driver signatures before asking Windows to install matching packages. The log records unresolved devices and their IDs. For offline or OEM-only hardware, you can also supply an extracted OEM driver folder containing INF files.
+
+```powershell
+& '.\New Computer Install.exe' -Actions DeviceHealth -DriverSource 'E:\OEM Drivers' -NoReboot
+```
 
 *Alternatively you can run the [New Computer Install Downloader.ps1](https://github.com/Hor318/New-Computer-Install/blob/main/New%20Computer%20Install%20Downloader.ps1) to download the latest version and launch it automatically*
 _______________
@@ -57,7 +67,7 @@ This is a summary of the script's functions
 4. Disable various settings and features
 5. Enable Plug and Play devices that may not be showing up
 6. Install missing drivers for devices
-7. Remove bundled bloatware and registered McAfee products (includes exception list)
+7. Remove bundled bloatware and machine-registered McAfee products (includes exception list)
 8. Set the timezone to Eastern (customize via function parameters)
 9. Set Windows Updates default settings
 10. Set various quality of life settings

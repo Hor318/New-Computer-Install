@@ -2,14 +2,15 @@
 
 Param ([switch]$Gui)
 
+$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 # Safety net: re-launch as admin if not already elevated
 If (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    $elevationArguments = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$MyInvocation.MyCommand.Path)
+    $elevationArguments = @('-NoProfile','-ExecutionPolicy','Bypass','-File',('"{0}"' -f $MyInvocation.MyCommand.Path))
     If ($Gui) { $elevationArguments += '-Gui' }
-    Start-Process powershell.exe -ArgumentList $elevationArguments -Verb RunAs
-    Exit
+    $elevated = Start-Process powershell.exe -ArgumentList $elevationArguments -Verb RunAs -Wait -PassThru
+    Exit $elevated.ExitCode
 }
 
 $repo            = "Hor318/New-Computer-Install"
@@ -32,9 +33,10 @@ If (-not $downloadUri) {
     Exit 1
 }
 
-$pathNoVer = "$env:Public\Desktop\New.Computer.Install"
-$pathFile  = "$env:Public\Desktop\New.Computer.Install $version.exe"
+If ($version -notmatch '^[vV]?\d+\.\d+\.\d+(?:[.-][A-Za-z0-9]+)*$') { Throw "Unexpected release tag [$version]." }
+$pathFile = "$env:Public\Desktop\New.Computer.Install $version.exe"
 $downloadFile = Join-Path $env:TEMP ([IO.Path]::GetRandomFileName() + '.exe')
+$downloadMoved = $false
 
 Try {
     Write-Output "Downloading version [$version] from [$downloadUri]"
@@ -49,11 +51,15 @@ Try {
         Write-Warning 'This release does not publish a SHA-256 digest; HTTPS transport is the only integrity check.'
     }
 
-    Get-ChildItem "$pathNoVer*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force
-    Move-Item -LiteralPath $downloadFile -Destination $pathFile -Force
-    If ($Gui) { Start-Process $pathFile -ArgumentList '-Gui' -Wait -Verb RunAs }
-    Else { Start-Process $pathFile -Wait -Verb RunAs }
+    If (Test-Path -LiteralPath $pathFile) {
+        $pathFile = "$env:Public\Desktop\New.Computer.Install $version-$([guid]::NewGuid().ToString('N')).exe"
+    }
+    Move-Item -LiteralPath $downloadFile -Destination $pathFile
+    $downloadMoved = $true
+    $installer = If ($Gui) { Start-Process -FilePath $pathFile -ArgumentList '-Gui' -Wait -PassThru }
+    Else { Start-Process -FilePath $pathFile -Wait -PassThru }
+    Exit $installer.ExitCode
 } Finally {
     Remove-Item -LiteralPath $downloadFile -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $pathFile -Force -ErrorAction SilentlyContinue
+    If ($downloadMoved) { Remove-Item -LiteralPath $pathFile -Force -ErrorAction SilentlyContinue }
 }

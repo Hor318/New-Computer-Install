@@ -15,6 +15,7 @@
     "adobereader"
   ],
   "InstallGpuDrivers": true,
+  "DriverSource": "",
   "OEMManufacturer": "Omnis Computers",
   "OEMSupportPhone": "(518) 372-7829",
   "OEMSupportURL": "https://www.omniscomputers.com",

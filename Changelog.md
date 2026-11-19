@@ -3,6 +3,24 @@ _____________________
 ### Newly added features will be updated here. I have added the old versions to the best of my ability.
 
 ------------------------------------------------------------------
+##### Version: 2.0.1
+    - Skipped the legacy News and Interests policy on unsupported Windows builds and editions.
+    - Applied the network adapter power-off setting only to physical adapters that expose it, so unsupported Wi-Fi adapters no longer abort the action.
+    - Added automatic Microsoft Update Catalog discovery and installation for devices still in error after the initial driver pass. Matches device IDs and platform, verifies download hashes and driver signatures, and respects managed Windows Update restrictions.
+    - Matched regular and optional Windows Update drivers to present problem devices by hardware and compatible IDs. Added a targeted Code 43 restart and verified the device state after repair.
+    - Logged individual driver package failures and hardware IDs for unresolved devices. Added a local OEM INF source for offline or unavailable Windows Update drivers.
+    - Fixed module loading on fresh Windows PowerShell installs with a process-only RemoteSigned policy when the effective policy is Restricted and Group Policy permits it.
+    - Installed, updated, and verified PSWindowsUpdate automatically from either Prerequisites or Windows Updates. Kept reboot-required updates eligible without prompting for an immediate restart.
+    - Suppressed repeated Chocolatey download progress and verbose Windows Update output, with concise action failure messages.
+    - Refreshed provisioned app inventory after installed app removal and continued processing packages after an individual error.
+    - Fixed Windows Update driver-search failures terminating the entire installation. Driver searches now use the PC's configured update source.
+    - Continued setup after individual prerequisite, package, driver, and repair failures. Recorded failures in the final summary and process exit code.
+    - Isolated default-app backup failures and skipped reversible actions whose settings could not be backed up.
+    - Preserved existing registry values when applying or restoring settings and restored DNS addresses per protocol family.
+    - Protected existing release EXEs during downloads, reported native repair failures, and limited elevated desktop uninstallers to machine registrations.
+    - Added a self-test that reproduces the driver failure and verifies that later actions still run.
+
+------------------------------------------------------------------
 ##### Version: 2.0.0
     - Branded the project as Aar318's New Computer Install with a new GUI, taskbar, and EXE icon
     - Added a selectable dark/light GUI with 60 individual setup, privacy, diagnostics, and repair options with contextual customization panels
